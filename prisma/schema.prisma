@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" 
+  url      = env("DATABASE_URL")
+}
+
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ForumPostStatus {
+  VISIBLE
+  HIDDEN
+  REPORTED
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+}
+
+enum NotiStatus {
+  UNREAD
+  READ
+}
+
+enum InteractType {
+  COMMENT
+  LIKE
+}
+
+model User {
+  id             Int       @id @default(autoincrement())
+  fullName       String    @map("full_name") @db.VarChar(255)
+  userName       String?   @unique @map("user_name") @db.VarChar(255) 
+  email          String    @unique @db.VarChar(255)
+  password       String?   @db.VarChar(255) 
+  role           Role      @default(USER)
+  avatarUrl      String?   @map("avatar_url") @db.Text
+  
+  googleId       String?   @unique @map("google_id")
+  facebookId     String?   @unique @map("facebook_id")
+  
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  fortuneRequests    FortuneRequest[]
+  tuVis              XemTuVi[]
+  nhanTuongs         NhanTuong[]
+  forumPosts         ForumPost[]
+  forumComments      ForumComment[]
+  reports            Report[]
+  receivedNotis      Notification[]
+  sentForumNotis     ForumNotification[] @relation("Sender")
+  receivedForumNotis ForumNotification[] @relation("Receiver")
+  likes              ForumLike[]
+
+  @@map("users")
+}
+
+model FortuneCategory {
+  id          Int              @id @default(autoincrement())
+  name        String           @db.VarChar(100)
+  description String?          @db.Text
+  createdAt   DateTime         @default(now()) @map("created_at")
+  requests    FortuneRequest[]
+
+  @@map("fortune_categories")
+}
+
+model FortuneRequest {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  categoryId Int      @map("category_id")
+  question   String   @db.Text
+  response   Json?    @db.Json // AI trả về JSON
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User            @relation(fields: [userId], references: [id])
+  category FortuneCategory @relation(fields: [categoryId], references: [id])
+
+  @@map("fortune_requests")
+}
+
+model XemTuVi {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  
+  birthDate DateTime @map("birth_date")
+  birthTime String?  @map("birth_time")
+  gender    String   @db.VarChar(10)
+  lunarDate String?  @map("lunar_date")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("xem_tu_vi")
+}
+
+model NhanTuong {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  imageUrl  String   @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("nhan_tuong")
+}
+
+model ForumPost {
+  id        Int             @id @default(autoincrement())
+  userId    Int             @map("user_id")
+  title     String          @db.VarChar(255)
+  content   String          @db.Text
+  category  String?         @db.VarChar(100)
+  status    ForumPostStatus @default(VISIBLE)
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  user          User                @relation(fields: [userId], references: [id])
+  comments      ForumComment[]
+  likes         ForumLike[]
+  reports       Report[]
+  notifications ForumNotification[]
+
+  @@map("forum_posts")
+}
+
+model ForumComment {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post          ForumPost           @relation(fields: [postId], references: [id])
+  user          User                @relation(fields: [userId], references: [id])
+  reports       Report[]
+  notifications ForumNotification[]
+
+  @@map("forum_comments")
+}
+
+model Report {
+  id        Int          @id @default(autoincrement())
+  userId    Int          @map("user_id") // Người báo cáo
+  postId    Int?         @map("post_id")
+  commentId Int?         @map("comment_id")
+  message   String       @db.Text
+  status    ReportStatus @default(PENDING)
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  user    User          @relation(fields: [userId], references: [id])
+  post    ForumPost?    @relation(fields: [postId], references: [id])
+  comment ForumComment? @relation(fields: [commentId], references: [id])
+
+  @@map("reports")
+}
+
+model Notification {
+  id        Int        @id @default(autoincrement())
+  userId    Int?       @map("user_id")
+  title     String     @db.VarChar(255)
+  content   String     @db.Text
+  status    NotiStatus @default(UNREAD)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model ForumNotification {
+  id         Int          @id @default(autoincrement())
+  postId     Int          @map("post_id")
+  commentId  Int?         @map("comment_id")
+  senderId   Int          @map("sender_id")
+  receiverId Int          @map("receiver_id")
+  type       InteractType
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  post     ForumPost     @relation(fields: [postId], references: [id])
+  comment  ForumComment? @relation(fields: [commentId], references: [id])
+  sender   User          @relation("Sender", fields: [senderId], references: [id])
+  receiver User          @relation("Receiver", fields: [receiverId], references: [id])
+
+  @@map("forum_notifications")
+}
+
+model ForumLike {
+  postId Int @map("post_id")
+  userId Int @map("user_id")
+
+  post ForumPost @relation(fields: [postId], references: [id])
+  user User      @relation(fields: [userId], references: [id])
+
+  @@id([postId, userId]) // Composite Key: 1 người chỉ like 1 bài viết 1 lần
+  @@map("forum_like")
+}
+
+model SystemStatistics {
+  id                   Int      @id @default(autoincrement())
+  totalUsers           Int      @default(0) @map("total_users")
+  totalPosts           Int      @default(0) @map("total_posts")
+  totalFortuneRequests Int      @default(0) @map("total_fortune_requests")
+  reportCount          Int      @default(0) @map("report_count")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("system_statistics")
+}
