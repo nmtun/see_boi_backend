@@ -3,20 +3,35 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" 
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+//////////////////////////////////////////////////
+// ENUMS
+//////////////////////////////////////////////////
 
 enum Role {
   USER
   ADMIN
 }
 
-enum ForumPostStatus {
+enum PostStatus {
   VISIBLE
   HIDDEN
-  REPORTED
+  DELETED
+}
+
+enum PostVisibility {
+  PUBLIC
+  FOLLOWERS
+  PRIVATE
+  ANONYMOUS
+}
+
+enum PostType {
+  NORMAL
+  POLL
 }
 
 enum ReportStatus {
@@ -25,194 +40,331 @@ enum ReportStatus {
   RESOLVED
 }
 
-enum NotiStatus {
-  UNREAD
-  READ
+enum NotificationType {
+  POST_LIKE
+  POST_COMMENT
+  FOLLOW
+  POLL_VOTE
+  MENTION
 }
 
-enum InteractType {
-  COMMENT
-  LIKE
+enum VoteType {
+  UP
+  DOWN
 }
+
+enum XPAction {
+  POST
+  COMMENT
+  LIKE_RECEIVED
+}
+
+//////////////////////////////////////////////////
+// USERS
+//////////////////////////////////////////////////
 
 model User {
-  id             Int       @id @default(autoincrement())
-  fullName       String    @map("full_name") @db.VarChar(255)
-  userName       String?   @unique @map("user_name") @db.VarChar(255) 
-  email          String    @unique @db.VarChar(255)
-  password       String?   @db.VarChar(255) 
-  role           Role      @default(USER)
-  avatarUrl      String?   @map("avatar_url") @db.Text
-  
-  googleId       String?   @unique @map("google_id")
-  facebookId     String?   @unique @map("facebook_id")
-  
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id          Int      @id @default(autoincrement())
+  fullName    String
+  userName    String?  @unique
+  email       String   @unique
+  password    String?
+  role        Role     @default(USER)
+  avatarUrl   String?
+  bio         String?
+  birthday    DateTime?
+  gender      String?
+  level       Int      @default(1)
+  xp          Int      @default(0)
+  googleId    String?  @unique
+  facebookId  String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  // Relations
-  fortuneRequests    FortuneRequest[]
-  tuVis              XemTuVi[]
-  nhanTuongs         NhanTuong[]
-  forumPosts         ForumPost[]
-  forumComments      ForumComment[]
-  reports            Report[]
-  receivedNotis      Notification[]
-  sentForumNotis     ForumNotification[] @relation("Sender")
-  receivedForumNotis ForumNotification[] @relation("Receiver")
-  likes              ForumLike[]
+  posts       Post[]
+  comments    Comment[]
+  likes       PostLike[]
+  followsFrom UserFollow[] @relation("Follower")
+  followsTo   UserFollow[] @relation("Following")
+  xpLogs      XPLog[]
+  badges      UserBadge[]
+  notifications Notification[]
+  reports     Report[] @relation("Reporter")
 
-  @@map("users")
+  // Add missing relations:
+  commentVotes CommentVote[]
+  collections  Collection[]
+  bookmarks    Bookmark[]
+  pollVotes    PollVote[]
+  postViews    PostView[]
 }
 
-model FortuneCategory {
-  id          Int              @id @default(autoincrement())
-  name        String           @db.VarChar(100)
-  description String?          @db.Text
-  createdAt   DateTime         @default(now()) @map("created_at")
-  requests    FortuneRequest[]
+//////////////////////////////////////////////////
+// FOLLOW SYSTEM
+//////////////////////////////////////////////////
 
-  @@map("fortune_categories")
+model UserFollow {
+  followerId  Int
+  followingId Int
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("Follower", fields: [followerId], references: [id])
+  following User @relation("Following", fields: [followingId], references: [id])
+
+  @@id([followerId, followingId])
 }
 
-model FortuneRequest {
-  id         Int      @id @default(autoincrement())
-  userId     Int      @map("user_id")
-  categoryId Int      @map("category_id")
-  question   String   @db.Text
-  response   Json?    @db.Json // AI trả về JSON
-  createdAt  DateTime @default(now()) @map("created_at")
+//////////////////////////////////////////////////
+// POSTS
+//////////////////////////////////////////////////
 
-  user     User            @relation(fields: [userId], references: [id])
-  category FortuneCategory @relation(fields: [categoryId], references: [id])
+model Post {
+  id         Int           @id @default(autoincrement())
+  userId     Int
+  title      String?
+  content    String?
+  type       PostType      @default(NORMAL)
+  visibility PostVisibility @default(PUBLIC)
+  status     PostStatus    @default(VISIBLE)
+  isDraft    Boolean       @default(false)
+  deletedAt  DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
-  @@map("fortune_requests")
+  user       User          @relation(fields: [userId], references: [id])
+  comments   Comment[]
+  likes      PostLike[]
+  tags       PostTag[]
+  edits      PostEditHistory[]
+  poll       Poll?
+  views      PostView[]
+  reports    Report[]
+  bookmarks    Bookmark[]
 }
 
-model XemTuVi {
+//////////////////////////////////////////////////
+// POST EDIT HISTORY
+//////////////////////////////////////////////////
+
+model PostEditHistory {
   id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  
-  birthDate DateTime @map("birth_date")
-  birthTime String?  @map("birth_time")
-  gender    String   @db.VarChar(10)
-  lunarDate String?  @map("lunar_date")
-  
-  createdAt DateTime @default(now()) @map("created_at")
-  user      User     @relation(fields: [userId], references: [id])
+  postId    Int
+  oldContent String?
+  editedAt  DateTime @default(now())
 
-  @@map("xem_tu_vi")
+  post      Post @relation(fields: [postId], references: [id])
 }
 
-model NhanTuong {
+//////////////////////////////////////////////////
+// COMMENTS
+//////////////////////////////////////////////////
+
+model Comment {
+  id          Int      @id @default(autoincrement())
+  postId      Int
+  userId      Int
+  parentId    Int?
+  content     String
+  isAnonymous Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  post        Post     @relation(fields: [postId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+  parent      Comment? @relation("CommentReply", fields: [parentId], references: [id])
+  replies     Comment[] @relation("CommentReply")
+  votes       CommentVote[]
+  reports     Report[]
+}
+
+//////////////////////////////////////////////////
+// COMMENT VOTES
+//////////////////////////////////////////////////
+
+model CommentVote {
+  commentId Int
+  userId    Int
+  type      VoteType
+
+  comment   Comment @relation(fields: [commentId], references: [id])
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+}
+
+//////////////////////////////////////////////////
+// POST LIKE
+//////////////////////////////////////////////////
+
+model PostLike {
+  postId    Int
+  userId    Int
+  createdAt DateTime @default(now())
+
+  post      Post @relation(fields: [postId], references: [id])
+  user      User @relation(fields: [userId], references: [id])
+
+  @@id([postId, userId])
+}
+
+//////////////////////////////////////////////////
+// TAGS
+//////////////////////////////////////////////////
+
+model Tag {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+
+  posts PostTag[]
+}
+
+model PostTag {
+  postId Int
+  tagId  Int
+
+  post   Post @relation(fields: [postId], references: [id])
+  tag    Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId])
+}
+
+//////////////////////////////////////////////////
+// BOOKMARK & COLLECTION
+//////////////////////////////////////////////////
+
+model Collection {
   id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  imageUrl  String   @db.VarChar(1000)
-  createdAt DateTime @default(now()) @map("created_at")
+  userId    Int
+  name      String
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+  bookmarks Bookmark[]
+}
+
+model Bookmark {
+  userId       Int
+  postId       Int
+  collectionId Int?
+  createdAt    DateTime @default(now())
+
+  user        User @relation(fields: [userId], references: [id])
+  post        Post @relation(fields: [postId], references: [id])
+  collection  Collection? @relation(fields: [collectionId], references: [id])
   
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@map("nhan_tuong")
+  @@id([userId, postId])
 }
 
-model ForumPost {
-  id        Int             @id @default(autoincrement())
-  userId    Int             @map("user_id")
-  title     String          @db.VarChar(255)
-  content   String          @db.Text
-  category  String?         @db.VarChar(100)
-  status    ForumPostStatus @default(VISIBLE)
-  createdAt DateTime        @default(now()) @map("created_at")
-  updatedAt DateTime        @updatedAt @map("updated_at")
+//////////////////////////////////////////////////
+// POLL
+//////////////////////////////////////////////////
 
-  user          User                @relation(fields: [userId], references: [id])
-  comments      ForumComment[]
-  likes         ForumLike[]
-  reports       Report[]
-  notifications ForumNotification[]
-
-  @@map("forum_posts")
-}
-
-model ForumComment {
+model Poll {
   id        Int      @id @default(autoincrement())
-  postId    Int      @map("post_id")
-  userId    Int      @map("user_id")
-  content   String   @db.Text
-  createdAt DateTime @default(now()) @map("created_at")
+  postId    Int      @unique
+  expiresAt DateTime?
 
-  post          ForumPost           @relation(fields: [postId], references: [id])
-  user          User                @relation(fields: [userId], references: [id])
-  reports       Report[]
-  notifications ForumNotification[]
-
-  @@map("forum_comments")
+  post      Post @relation(fields: [postId], references: [id])
+  options   PollOption[]
 }
 
-model Report {
-  id        Int          @id @default(autoincrement())
-  userId    Int          @map("user_id") // Người báo cáo
-  postId    Int?         @map("post_id")
-  commentId Int?         @map("comment_id")
-  message   String       @db.Text
-  status    ReportStatus @default(PENDING)
-  createdAt DateTime     @default(now()) @map("created_at")
+model PollOption {
+  id      Int    @id @default(autoincrement())
+  pollId  Int
+  text    String
 
-  user    User          @relation(fields: [userId], references: [id])
-  post    ForumPost?    @relation(fields: [postId], references: [id])
-  comment ForumComment? @relation(fields: [commentId], references: [id])
-
-  @@map("reports")
+  poll    Poll @relation(fields: [pollId], references: [id])
+  votes   PollVote[]
 }
+
+model PollVote {
+  pollOptionId Int
+  userId       Int
+  createdAt    DateTime @default(now())
+
+  option       PollOption @relation(fields: [pollOptionId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@id([pollOptionId, userId])
+}
+
+//////////////////////////////////////////////////
+// GAMIFICATION
+//////////////////////////////////////////////////
+
+model XPLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    XPAction
+  value     Int
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+}
+
+model Badge {
+  id          Int    @id @default(autoincrement())
+  name        String
+  description String?
+
+  users       UserBadge[]
+}
+
+model UserBadge {
+  userId   Int
+  badgeId  Int
+  earnedAt DateTime @default(now())
+
+  user     User  @relation(fields: [userId], references: [id])
+  badge    Badge @relation(fields: [badgeId], references: [id])
+
+  @@id([userId, badgeId])
+}
+
+//////////////////////////////////////////////////
+// NOTIFICATIONS
+//////////////////////////////////////////////////
 
 model Notification {
-  id        Int        @id @default(autoincrement())
-  userId    Int?       @map("user_id")
-  title     String     @db.VarChar(255)
-  content   String     @db.Text
-  status    NotiStatus @default(UNREAD)
-  createdAt DateTime   @default(now()) @map("created_at")
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  refId     Int?
+  content   String
+  isRead    Boolean @default(false)
+  createdAt DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id])
-
-  @@map("notifications")
+  user      User @relation(fields: [userId], references: [id])
 }
 
-model ForumNotification {
-  id         Int          @id @default(autoincrement())
-  postId     Int          @map("post_id")
-  commentId  Int?         @map("comment_id")
-  senderId   Int          @map("sender_id")
-  receiverId Int          @map("receiver_id")
-  type       InteractType
-  createdAt  DateTime     @default(now()) @map("created_at")
+//////////////////////////////////////////////////
+// REPORTS
+//////////////////////////////////////////////////
 
-  post     ForumPost     @relation(fields: [postId], references: [id])
-  comment  ForumComment? @relation(fields: [commentId], references: [id])
-  sender   User          @relation("Sender", fields: [senderId], references: [id])
-  receiver User          @relation("Receiver", fields: [receiverId], references: [id])
+model Report {
+  id         Int      @id @default(autoincrement())
+  reporterId Int
+  postId     Int?
+  commentId  Int?
+  reason     String
+  status     ReportStatus @default(PENDING)
+  createdAt  DateTime @default(now())
 
-  @@map("forum_notifications")
+  reporter   User    @relation("Reporter", fields: [reporterId], references: [id])
+  post       Post?   @relation(fields: [postId], references: [id])
+  comment    Comment? @relation(fields: [commentId], references: [id])
 }
 
-model ForumLike {
-  postId Int @map("post_id")
-  userId Int @map("user_id")
+//////////////////////////////////////////////////
+// POST VIEW
+//////////////////////////////////////////////////
 
-  post ForumPost @relation(fields: [postId], references: [id])
-  user User      @relation(fields: [userId], references: [id])
+model PostView {
+  postId   Int
+  userId   Int?
+  viewedAt DateTime @default(now())
 
-  @@id([postId, userId]) // Composite Key: 1 người chỉ like 1 bài viết 1 lần
-  @@map("forum_like")
-}
+  post     Post @relation(fields: [postId], references: [id])
+  user     User? @relation(fields: [userId], references: [id])
 
-model SystemStatistics {
-  id                   Int      @id @default(autoincrement())
-  totalUsers           Int      @default(0) @map("total_users")
-  totalPosts           Int      @default(0) @map("total_posts")
-  totalFortuneRequests Int      @default(0) @map("total_fortune_requests")
-  reportCount          Int      @default(0) @map("report_count")
-  updatedAt            DateTime @updatedAt @map("updated_at")
-
-  @@map("system_statistics")
+  @@id([postId, viewedAt])
 }

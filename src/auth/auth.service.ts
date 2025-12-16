@@ -11,18 +11,22 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
-    private config: ConfigService, 
-  ) {}
+    private config: ConfigService,
+  ) { }
 
   async register(dto: RegisterDto) {
     const hash = await bcrypt.hash(dto.password, 10);
-    
+
     try {
       const user = await this.prisma.user.create({
         data: {
           email: dto.email,
           password: hash,
           fullName: dto.fullName,
+          userName: dto.userName,
+          role: dto.role ?? 'USER',
+          birthday: dto.birthday,
+          gender: dto.gender,
         },
       });
 
@@ -43,12 +47,12 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user || !user.password) 
+    if (!user || !user.password)
       throw new ForbiddenException('Email hoặc mật khẩu không chính xác');
 
     const pwMatches = await bcrypt.compare(dto.password, user.password);
-    
-    if (!pwMatches) 
+
+    if (!pwMatches)
       throw new ForbiddenException('Email hoặc mật khẩu không chính xác');
 
     return this.signToken(user.id, user.email, user.role);
@@ -56,12 +60,12 @@ export class AuthService {
 
   async signToken(userId: number, email: string, role: string) {
     const payload = { sub: userId, email, role };
-    
+
     const secret = this.config.get('JWT_SECRET');
-    const expiresIn = this.config.get('JWT_EXPIRATION'); 
+    const expiresIn = this.config.get('JWT_EXPIRATION');
 
     const token = await this.jwt.signAsync(payload, {
-      expiresIn: expiresIn, 
+      expiresIn: expiresIn,
       secret: secret,
     });
 
