@@ -15,6 +15,10 @@
 # Chạy migration
     npx prisma migrate dev --name ten_migration_cua_ban
 
+# Chạy migration đã có và generate lại 
+    npx prisma migrate deploy
+    npx prisma generate
+
 # Chạy project 
     nest start --watch     
 
