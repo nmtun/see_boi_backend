@@ -7,6 +7,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
+  // CORS configuration
+  app.enableCors({
+    origin: true, // Cho phép tất cả origins (có thể thay bằng mảng cụ thể như ['http://localhost:3000'])
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true,
+  });
+
   // Test route
   app.getHttpAdapter().getInstance().get('/', (req, res) => {
     res.json({
