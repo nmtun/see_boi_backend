@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
@@ -30,7 +30,22 @@ export class AuthService {
         },
       });
 
-      return this.signToken(user.id, user.email, user.role);
+      const token = await this.signToken(user.id, user.email, user.role);
+
+      // Chỉ trả về các field cần thiết, loại bỏ sensitive data
+      const { 
+        password,           // ❌ Không trả về
+        googleId,          // ❌ Không trả về (sensitive)
+        facebookId,        // ❌ Không trả về (sensitive)
+        createdAt,        // ⚠️ Không cần cho register response
+        updatedAt,         // ⚠️ Không cần cho register response
+        ...safeUserData    // ✅ Các field còn lại
+      } = user;
+
+      return {
+        access_token: token.access_token,
+        user: safeUserData
+      };
 
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError) {
@@ -43,17 +58,32 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    // Tìm user bằng email hoặc username
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: dto.email },
+          { userName: dto.email },
+        ],
+      },
     });
   
-    if (!user || !user.password)
-      throw new ForbiddenException('Email hoặc mật khẩu không chính xác');
+    // Kiểm tra tài khoản có tồn tại không
+    if (!user) {
+      throw new NotFoundException('Tài khoản không tồn tại');
+    }
   
+    // Kiểm tra user có password không (có thể là OAuth user)
+    if (!user.password) {
+      throw new ForbiddenException('Tài khoản này đăng nhập bằng phương thức khác (Google/Facebook)');
+    }
+  
+    // Kiểm tra mật khẩu
     const pwMatches = await bcrypt.compare(dto.password, user.password);
   
-    if (!pwMatches)
-      throw new ForbiddenException('Email hoặc mật khẩu không chính xác');
+    if (!pwMatches) {
+      throw new UnauthorizedException('Mật khẩu không chính xác');
+    }
   
     const token = await this.signToken(user.id, user.email, user.role);
   
