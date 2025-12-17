@@ -46,31 +46,45 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-
+  
     if (!user || !user.password)
       throw new ForbiddenException('Email hoặc mật khẩu không chính xác');
-
+  
     const pwMatches = await bcrypt.compare(dto.password, user.password);
-
+  
     if (!pwMatches)
       throw new ForbiddenException('Email hoặc mật khẩu không chính xác');
-
-    return this.signToken(user.id, user.email, user.role);
+  
+    const token = await this.signToken(user.id, user.email, user.role);
+  
+    // Chỉ trả về các field cần thiết, loại bỏ sensitive data
+    const { 
+      password,           // ❌ Không trả về
+      googleId,          // ❌ Không trả về (sensitive)
+      facebookId,        // ❌ Không trả về (sensitive)
+      createdAt,        // ⚠️ Không cần cho login response
+      updatedAt,         // ⚠️ Không cần cho login response
+      ...safeUserData    // ✅ Các field còn lại
+    } = user;
+  
+    return {
+      access_token: token.access_token,
+      user: safeUserData
+    };
   }
-
+  
   async signToken(userId: number, email: string, role: string) {
     const payload = { sub: userId, email, role };
-
     const secret = this.config.get('JWT_SECRET');
     const expiresIn = this.config.get('JWT_EXPIRATION');
-
+  
     const token = await this.jwt.signAsync(payload, {
       expiresIn: expiresIn,
       secret: secret,
     });
-
+  
     return {
-      access_token: token,
+      access_token: token
     };
   }
 }
