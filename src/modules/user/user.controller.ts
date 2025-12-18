@@ -1,10 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RolesGuard } from '../../auth/guard/roles.guard';
 import { User } from './entities/user.entity';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { storage } from '../../utils/cloudinary-storage';
+import { File as MulterFile } from 'multer';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -40,21 +43,50 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch('me')
+  @UseInterceptors(FileInterceptor('avatar', { storage }))
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({ 
     summary: 'Cập nhật thông tin người dùng hiện tại',
-    description: 'Cập nhật thông tin cá nhân của người dùng đang đăng nhập. Tất cả các trường đều là optional.' 
+    description: 'Cập nhật thông tin cá nhân. Upload file ảnh ở trường "avatar" (file). Các trường khác nhập text.' 
   })
-  @ApiBody({ type: UpdateUserDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        fullName: { type: 'string', example: 'Nguyễn Văn A' },
+        userName: { type: 'string', example: 'nguyenvana' },
+        email: { type: 'string', example: 'nguyenvana@example.com' },
+        birthday: { type: 'string', format: 'date', example: '1990-01-01' },
+        gender: { type: 'string', example: 'Nam' },
+        bio: { type: 'string', example: 'Developer at ABC Company' },
+        avatar: { 
+          type: 'string', 
+          format: 'binary',
+          description: 'File ảnh đại diện (upload từ máy tính)' 
+        }
+      }
+    }
+  })
   @ApiResponse({ 
     status: 200, 
     description: 'Cập nhật thành công',
   })
   @ApiResponse({ status: 401, description: 'Chưa đăng nhập hoặc token không hợp lệ' })
-  async updateMe(@Req() req, @Body() dto: UpdateUserDto) {
+  async updateMe(
+    @Req() req, 
+    @Body() dto: UpdateUserDto, 
+    @UploadedFile() file?: MulterFile
+  ) {
     let data: any = { ...dto };
     if (data.birthday && typeof data.birthday === 'string') {
       data.birthday = new Date(data.birthday);
     }
+        
+    // Nếu upload file ảnh mới từ Cloudinary
+    if (file && (file as any).secure_url) {
+      data.avatarUrl = (file as any).secure_url;
+    }
+    
     const updatedUser = await this.userService.updateMe(req.user.id, data);
     return new User(updatedUser);
   }
@@ -187,4 +219,4 @@ export class UserController {
     return badges;
   }
   
-}  
+}

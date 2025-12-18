@@ -65,14 +65,5 @@ export class UpdateUserDto {
   })
   @IsOptional()
   @IsString()
-  avatar?: string;
-
-  @ApiPropertyOptional({
-    description: 'URL ảnh bìa',
-    example: 'https://example.com/cover.jpg',
-    type: String,
-  })
-  @IsOptional()
-  @IsString()
-  coverImage?: string;
+  avatarUrl?: string;
 }
