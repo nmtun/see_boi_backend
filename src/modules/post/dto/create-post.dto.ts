@@ -1,33 +1,71 @@
 import { IsOptional, IsString, IsEnum, IsBoolean, IsArray, IsInt } from 'class-validator';
 import { PostType, PostVisibility } from '@prisma/client';
 import { CreatePollDto } from './create-poll.dto';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreatePostDto {
+    @ApiPropertyOptional({
+        description: 'Tiêu đề của bài viết',
+        example: 'Tiêu đề bài viết mẫu',
+        type: String,
+    })
     @IsOptional()
     @IsString()
     title?: string;
 
+    @ApiPropertyOptional({
+        description: 'Nội dung của bài viết (hỗ trợ Markdown)',
+        example: 'Đây là nội dung bài viết...',
+        type: String,
+    })
     @IsOptional()
     @IsString()
     content?: string;
 
+    @ApiPropertyOptional({
+        description: 'Loại bài viết',
+        enum: PostType,
+        example: PostType.NORMAL,
+        default: PostType.NORMAL,
+    })
     @IsOptional()
     @IsEnum(PostType)
     type?: PostType = PostType.NORMAL;
 
+    @ApiPropertyOptional({
+        description: 'Mức độ hiển thị của bài viết',
+        enum: PostVisibility,
+        example: PostVisibility.PUBLIC,
+        default: PostVisibility.PUBLIC,
+    })
     @IsOptional()
     @IsEnum(PostVisibility)
     visibility?: PostVisibility = PostVisibility.PUBLIC;
 
+    @ApiPropertyOptional({
+        description: 'Bài viết là bản nháp (chưa xuất bản)',
+        example: false,
+        default: false,
+        type: Boolean,
+    })
     @IsOptional()
     @IsBoolean()
     isDraft?: boolean = false;
 
+    @ApiPropertyOptional({
+        description: 'Danh sách ID của các tags đính kèm',
+        example: [1, 2, 3],
+        type: [Number],
+    })
     @IsOptional()
     @IsArray()
     @IsInt({ each: true })
     tagIds?: number[];
 
+    @ApiPropertyOptional({
+        description: 'Thông tin poll (nếu bài viết là loại POLL)',
+        type: () => CreatePollDto,
+    })
     @IsOptional()
     poll?: CreatePollDto;
 }

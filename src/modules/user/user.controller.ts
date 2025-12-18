@@ -4,14 +4,35 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { RolesGuard } from '../../auth/guard/roles.guard';
 import { User } from './entities/user.entity';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 
-
+@ApiTags('Users')
+@ApiBearerAuth()
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) { }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get('me')
+  @ApiOperation({ 
+    summary: 'Lấy thông tin người dùng hiện tại',
+    description: 'Lấy thông tin chi tiết của người dùng đang đăng nhập (dựa vào JWT token)' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Thành công',
+    schema: {
+      example: {
+        id: 1,
+        email: 'user@example.com',
+        userName: 'username',
+        fullName: 'Full Name',
+        bio: 'User bio',
+        avatar: 'https://example.com/avatar.jpg'
+      }
+    }
+  })
+  @ApiResponse({ status: 401, description: 'Chưa đăng nhập hoặc token không hợp lệ' })
   async getMe(@Req() req) {
     const user = await this.userService.findMe(req.user.id);
     return new User(user);
@@ -19,6 +40,16 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch('me')
+  @ApiOperation({ 
+    summary: 'Cập nhật thông tin người dùng hiện tại',
+    description: 'Cập nhật thông tin cá nhân của người dùng đang đăng nhập. Tất cả các trường đều là optional.' 
+  })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Cập nhật thành công',
+  })
+  @ApiResponse({ status: 401, description: 'Chưa đăng nhập hoặc token không hợp lệ' })
   async updateMe(@Req() req, @Body() dto: UpdateUserDto) {
     let data: any = { ...dto };
     if (data.birthday && typeof data.birthday === 'string') {
@@ -30,6 +61,13 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id')
+  @ApiOperation({ 
+    summary: 'Lấy thông tin người dùng theo ID',
+    description: 'Lấy thông tin chi tiết của một người dùng bất kỳ thông qua ID' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng', type: Number })
+  @ApiResponse({ status: 200, description: 'Thành công' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng' })
   async getById(@Param('id') id: string) {
     const user = await this.userService.findById(+id);
     return new User(user);
@@ -37,6 +75,12 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id/posts')
+  @ApiOperation({ 
+    summary: 'Lấy danh sách bài viết của người dùng',
+    description: 'Lấy tất cả bài viết do người dùng tạo' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng', type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách bài viết' })
   async getUserPosts(@Param('id') id: string) {
     const posts = await this.userService.getUserPosts(+id);
     return posts;
@@ -44,6 +88,12 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id/followers')
+  @ApiOperation({ 
+    summary: 'Lấy danh sách người theo dõi',
+    description: 'Lấy danh sách những người đang theo dõi người dùng này' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng', type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách followers' })
   async getUserFollowers(@Param('id') id: string) {
     const followers = await this.userService.getUserFollowers(+id);
     return followers.map(f => new User(f));
@@ -51,6 +101,12 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id/following')
+  @ApiOperation({ 
+    summary: 'Lấy danh sách đang theo dõi',
+    description: 'Lấy danh sách những người mà người dùng này đang theo dõi' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng', type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách following' })
   async getUserFollowing(@Param('id') id: string) {
     const following = await this.userService.getUserFollowing(+id);
     return following.map(f => new User(f));
@@ -58,6 +114,13 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/follow')
+  @ApiOperation({ 
+    summary: 'Theo dõi người dùng',
+    description: 'Người dùng hiện tại theo dõi người dùng khác' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng muốn theo dõi', type: Number })
+  @ApiResponse({ status: 201, description: 'Theo dõi thành công' })
+  @ApiResponse({ status: 400, description: 'Không thể tự theo dõi chính mình hoặc đã theo dõi trước đó' })
   async followUser(@Req() req, @Param('id') id: string) {
     const result = await this.userService.followUser(req.user.id, +id);
     return result;
@@ -65,6 +128,12 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/unfollow')
+  @ApiOperation({ 
+    summary: 'Hủy theo dõi người dùng',
+    description: 'Người dùng hiện tại hủy theo dõi người dùng khác' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng muốn hủy theo dõi', type: Number })
+  @ApiResponse({ status: 200, description: 'Hủy theo dõi thành công' })
   async unfollowUser(@Req() req, @Param('id') id: string) {
     const result = await this.userService.unfollowUser(req.user.id, +id);
     return result;
@@ -72,6 +141,12 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/remove-follower')
+  @ApiOperation({ 
+    summary: 'Xóa người theo dõi',
+    description: 'Xóa một người đang theo dõi bạn khỏi danh sách followers' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người muốn xóa khỏi followers', type: Number })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
   async removeFollower(@Req() req, @Param('id') id: string) {
     const result = await this.userService.removeFollower(+id, req.user.id);
     return result;
@@ -79,18 +154,34 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get('me/xp')
+  @ApiOperation({ 
+    summary: 'Lấy thông tin điểm kinh nghiệm (XP)',
+    description: 'Lấy thông tin XP hiện tại của người dùng đang đăng nhập' 
+  })
+  @ApiResponse({ status: 200, description: 'Thông tin XP' })
   getMyXp(@Req() req) {
     return this.userService.getMyXp(req.user.id);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get('me/xp-logs')
+  @ApiOperation({ 
+    summary: 'Lấy lịch sử XP',
+    description: 'Lấy lịch sử thay đổi điểm kinh nghiệm của người dùng' 
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách lịch sử XP' })
   getMyXpLogs(@Req() req) {
     return this.userService.getMyXpLogs(req.user.id);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id/badges')
+  @ApiOperation({ 
+    summary: 'Lấy danh sách huy hiệu',
+    description: 'Lấy tất cả huy hiệu mà người dùng đã đạt được' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng', type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách badges' })
   async getUserBadges(@Param('id') id: string) {
     const badges = await this.userService.getUserBadges(+id);
     return badges;
