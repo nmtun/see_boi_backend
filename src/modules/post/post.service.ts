@@ -374,4 +374,22 @@ export class PostService {
       data: { visibility },
     });
   }
+
+  // lấy bài viết của 1 users khi xem profile
+  async getPostsByUser(userId: number) {
+    return this.prisma.post.findMany({
+      where: {
+        userId,
+        status: PostStatus.VISIBLE,
+        isDraft: false,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        likes: true,
+        comments: true,
+        tags: { include: { tag: true } },
+        poll: { include: { options: true } },
+      },
+    });
+  }
 }

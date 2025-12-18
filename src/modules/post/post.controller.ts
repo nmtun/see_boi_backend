@@ -353,4 +353,16 @@ export class PostController {
     return new Posts(post);
   }
 
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get(':id/posts')
+  @ApiOperation({
+    summary: 'Lấy danh sách bài viết liên quan',
+    description: 'Lấy tất cả bài viết liên quan do cùng một tác giả tạo'
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách bài viết liên quan' })
+  async getPostsByUser(@Param('id') id: string) {
+    const posts = await this.postService.getPostsByUser(+id);
+    return posts;
+  }
 }
