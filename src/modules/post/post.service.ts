@@ -4,10 +4,11 @@ import { CreatePollDto } from './dto/create-poll.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PostContentFormat, PostStatus, PostVisibility, Prisma } from '@prisma/client';
+import { NotificationGateway } from 'src/utils/notification.gateway';
 
 @Injectable()
 export class PostService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService, private notificationGateway: NotificationGateway) { }
 
   private validateContentJsonSize(contentJson: Record<string, any>, maxBytes = 200_000) {
     // Xấp xỉ byte-length. Với JSON ASCII là khá sát; unicode có thể lớn hơn một chút.
@@ -60,6 +61,31 @@ export class PostService {
     let poll: any = null;
     if (dto.poll) {
       poll = await this.createPoll(post.id, userId, dto.poll);
+    }
+
+    // gửi thông báo đến followers nếu không phải draft
+    if (!post.isDraft) {
+      const followers = await this.prisma.userFollow.findMany({
+        where: { followingId: userId },
+        select: { followerId: true },
+      });
+
+      const notifications = await Promise.all(
+        followers.map(follower =>
+          this.prisma.notification.create({
+            data: {
+              userId: follower.followerId,
+              type: 'NEW_POST',
+              content: 'Người bạn theo dõi vừa đăng bài viết mới',
+              refId: post.id,
+            },
+          })
+        )
+      );
+
+      for (const notification of notifications) {
+        this.notificationGateway.sendNotification(notification.userId, notification);
+      }
     }
 
     return {
@@ -216,12 +242,35 @@ export class PostService {
 
   // like & unlike bài viết
   async like(postId: number, userId: number) {
-    return this.prisma.postLike.create({
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { userId: true },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    const like = await this.prisma.postLike.create({
       data: {
         postId,
         userId,
       },
     });
+
+    // Chỉ gửi thông báo nếu người like khác chủ bài viết
+    if (post.userId !== userId) {
+     const notification = await this.prisma.notification.create({
+        data: {
+          userId: post.userId,
+          type: 'POST_LIKE',
+          content: 'Có người thích bài viết của bạn',
+          refId: postId,
+        },
+      });
+
+      // Gửi socket realtime
+      this.notificationGateway.sendLike(post.userId, notification);
+    }
+
+    return like;
   }
 
   async unlike(postId: number, userId: number) {
@@ -280,7 +329,7 @@ export class PostService {
       }
     }
 
-    return this.prisma.comment.create({
+    const comment = await this.prisma.comment.create({
       data: {
         postId,
         userId,
@@ -288,6 +337,24 @@ export class PostService {
         parentId,
       },
     });
+
+    // Chỉ gửi thông báo nếu người comment khác chủ bài viết
+    if (post.userId !== userId) {
+      // Lưu thông báo vào database
+      const notification = await this.prisma.notification.create({
+        data: {
+          userId: post.userId,
+          type: 'POST_COMMENT',
+          content: 'Có bình luận mới trên bài viết của bạn',
+          refId: comment.id,
+        },
+      });
+
+      // Gửi socket realtime
+      this.notificationGateway.sendComment(post.userId, notification);
+    }
+
+    return comment;
   }
 
   // lấy bình luận của bài viết

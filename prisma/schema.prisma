@@ -49,8 +49,7 @@ enum NotificationType {
   POST_LIKE
   POST_COMMENT
   FOLLOW
-  POLL_VOTE
-  MENTION
+  NEW_POST
 }
 
 enum VoteType {

@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationGateway } from 'src/utils/notification.gateway';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService, private notificationGateway: NotificationGateway) { }
 
   // profile
   async findMe(userId: number) {
@@ -66,11 +67,17 @@ export class UserService {
 
   // theo dõi một user
   async followUser(followerId: number, followingId: number) {
-    return this.prisma.userFollow.create({
+    const follow = await this.prisma.userFollow.create({
       data: {
         followerId,
         followingId,
       },
+    });
+
+    this.notificationGateway.sendNotification(followingId, {
+      type: 'FOLLOW',
+      content: 'Bạn có người theo dõi mới',
+      refId: followerId,
     });
   }
 
