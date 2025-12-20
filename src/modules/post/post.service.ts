@@ -1,13 +1,21 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PostStatus, PostVisibility } from '@prisma/client';
+import { PostContentFormat, PostStatus, PostVisibility, Prisma } from '@prisma/client';
 
 @Injectable()
 export class PostService {
   constructor(private readonly prisma: PrismaService) { }
+
+  private validateContentJsonSize(contentJson: Record<string, any>, maxBytes = 200_000) {
+    // Xấp xỉ byte-length. Với JSON ASCII là khá sát; unicode có thể lớn hơn một chút.
+    const size = Buffer.byteLength(JSON.stringify(contentJson), 'utf8');
+    if (size > maxBytes) {
+      throw new BadRequestException(`contentJson quá lớn (${size} bytes). Giới hạn: ${maxBytes} bytes.`);
+    }
+  }
 
   // tạo bài viết
   async create(userId: number, dto: CreatePostDto) {
@@ -16,11 +24,22 @@ export class PostService {
     if (tagIds) {
       tagIds = Array.from(new Set(tagIds));
     }
+
+    if (dto.contentJson) {
+      this.validateContentJsonSize(dto.contentJson);
+    }
+
+    const contentFormat =
+      dto.contentJson ? PostContentFormat.TIPTAP_JSON : dto.content ? PostContentFormat.PLAIN_TEXT : PostContentFormat.TIPTAP_JSON;
+
     const post = await this.prisma.post.create({
       data: {
         userId,
         title: dto.title,
         content: dto.content,
+        contentJson: dto.contentJson ? (dto.contentJson as Prisma.InputJsonValue) : undefined,
+        contentText: dto.contentText ?? null,
+        contentFormat,
         type: dto.type,
         visibility: dto.visibility ?? PostVisibility.PUBLIC,
         isDraft: dto.isDraft ?? false,
@@ -63,12 +82,36 @@ export class PostService {
       },
     });
 
-    // Loại bỏ trường poll nếu có
-    const { poll, ...updateData } = dto;
+    if (dto.contentJson) {
+      this.validateContentJsonSize(dto.contentJson);
+    }
+
+    // Loại bỏ các trường không thuộc bảng Post
+    const { poll, tagIds, ...rest } = dto;
+
+    let nextContentFormat: PostContentFormat | undefined = undefined;
+    if (dto.contentJson !== undefined || dto.content !== undefined) {
+      const willUseJson = dto.contentJson !== undefined ? !!dto.contentJson : !!post.contentJson;
+      const willUseLegacy = dto.content !== undefined ? !!dto.content : !!post.content;
+      nextContentFormat = willUseJson ? PostContentFormat.TIPTAP_JSON : willUseLegacy ? PostContentFormat.PLAIN_TEXT : PostContentFormat.TIPTAP_JSON;
+    }
+
+    const normalizedTagIds = tagIds ? Array.from(new Set(tagIds)) : undefined;
 
     return this.prisma.post.update({
       where: { id: postId },
-      data: updateData,
+      data: {
+        ...rest,
+        contentJson: dto.contentJson === undefined ? undefined : (dto.contentJson as Prisma.InputJsonValue),
+        contentText: dto.contentText === undefined ? undefined : dto.contentText ?? null,
+        contentFormat: nextContentFormat,
+        tags: normalizedTagIds
+          ? {
+              deleteMany: {},
+              create: normalizedTagIds.map((tagId) => ({ tagId })),
+            }
+          : undefined,
+      },
     });
   }
 

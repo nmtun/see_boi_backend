@@ -1,10 +1,13 @@
-import { PostType, PostVisibility, PostStatus } from '@prisma/client';
+import { PostContentFormat, PostType, PostVisibility, PostStatus, Prisma } from '@prisma/client';
 
 export class Posts {
   id: number;
   userId: number;
   title: string | null;
   content: string | null;
+  contentJson?: Prisma.JsonValue | null;
+  contentText?: string | null;
+  contentFormat?: PostContentFormat;
   type: PostType;
   visibility: PostVisibility;
   status: PostStatus;

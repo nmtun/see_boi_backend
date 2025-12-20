@@ -34,6 +34,11 @@ enum PostType {
   POLL
 }
 
+enum PostContentFormat {
+  PLAIN_TEXT
+  TIPTAP_JSON
+}
+
 enum ReportStatus {
   PENDING
   REVIEWED
@@ -123,6 +128,9 @@ model Post {
   userId     Int
   title      String?
   content    String?
+  contentJson Json?
+  contentText String?
+  contentFormat PostContentFormat @default(TIPTAP_JSON)
   type       PostType      @default(NORMAL)
   visibility PostVisibility @default(PUBLIC)
   status     PostStatus    @default(VISIBLE)
