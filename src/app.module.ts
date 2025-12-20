@@ -12,6 +12,7 @@ import { PollModule } from './modules/poll/poll.module';
 import { BadgeModule } from './modules/badge/badge.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { ReportModule } from './modules/report/report.module';
+import { NotificationGateway } from './utils/notification.gateway';
 
 @Module({
   imports: [
@@ -19,6 +20,6 @@ import { ReportModule } from './modules/report/report.module';
     AuthModule, UserModule, PostModule, CommentModule, TagModule, CollectionModule, PollModule, BadgeModule, NotificationModule, ReportModule,   
   ],
   controllers: [], 
-  providers: [],  
+  providers: [NotificationGateway],  
 })
 export class AppModule {}

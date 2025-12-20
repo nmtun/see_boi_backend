@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationQueryDto } from './dto/notification-query.dto';
+import { NotificationGateway } from 'src/utils/notification.gateway';
 
 @Injectable()
 export class NotificationService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private notificationGateway: NotificationGateway,
+  ) { }
 
   // Lấy tất cả thông báo của user, có phân trang
   async findMine(userId: number, query: NotificationQueryDto) {

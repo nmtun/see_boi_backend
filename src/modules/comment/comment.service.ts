@@ -3,10 +3,14 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ReplyCommentDto } from './dto/reply-comment.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { VoteType } from '@prisma/client';
+import { NotificationGateway } from 'src/utils/notification.gateway';
 
 @Injectable()
 export class CommentService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private notificationGateway: NotificationGateway,
+  ) { }
 
   async update(commentId: number, userId: number, dto: UpdateCommentDto) {
     const comment = await this.prisma.comment.findUnique({
@@ -46,7 +50,7 @@ export class CommentService {
     });
     if (!parent) throw new NotFoundException('Parent comment not found');
 
-    return this.prisma.comment.create({
+    const replyComment = await this.prisma.comment.create({
       data: {
         postId: parent.postId,
         userId,
@@ -54,6 +58,24 @@ export class CommentService {
         content: dto.content,
       },
     });
+
+    // Chỉ gửi thông báo nếu người reply khác chủ comment cha
+    if (parent.userId !== userId) {
+      // Lưu thông báo vào database
+      const notification = await this.prisma.notification.create({
+        data: {
+          userId: parent.userId,
+          type: 'POST_COMMENT',
+          content: 'Có người trả lời bình luận của bạn',
+          refId: replyComment.id,
+        },
+      });
+
+      // Gửi socket realtime
+      this.notificationGateway.sendComment(parent.userId, notification);
+    }
+
+    return replyComment;
   }
 
   // vote type: upvote / downvote
