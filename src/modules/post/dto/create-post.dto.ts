@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum, IsBoolean, IsArray, IsInt } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsBoolean, IsArray, IsInt, IsObject, MaxLength } from 'class-validator';
 import { PostType, PostVisibility } from '@prisma/client';
 import { CreatePollDto } from './create-poll.dto';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -21,6 +21,26 @@ export class CreatePostDto {
     @IsOptional()
     @IsString()
     content?: string;
+
+  @ApiPropertyOptional({
+    description: 'Nội dung rich text dạng JSON (ProseMirror/Tiptap)',
+    example: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Xin chào' }] }] },
+    type: Object,
+  })
+  @IsOptional()
+  @IsObject()
+  contentJson?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description: 'Nội dung plain text rút gọn từ editor (dùng preview/search)',
+    example: 'Xin chào',
+    type: String,
+    maxLength: 20000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20000)
+  contentText?: string;
 
     @ApiPropertyOptional({
         description: 'Loại bài viết',
