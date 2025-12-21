@@ -14,6 +14,7 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { ReportModule } from './modules/report/report.module';
 import { TuViModule } from './modules/tuvi/tuvi.module';
 import { GoogleGeminiModule } from './modules/gemini/google-gemini.module';
+import { NotificationGateway } from './utils/notification.gateway';
 
 @Module({
   imports: [
@@ -22,6 +23,6 @@ import { GoogleGeminiModule } from './modules/gemini/google-gemini.module';
     GoogleGeminiModule
   ],
   controllers: [], 
-  providers: [],  
+  providers: [NotificationGateway],  
 })
 export class AppModule {}

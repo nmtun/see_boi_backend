@@ -6,7 +6,7 @@ import { User } from './entities/user.entity';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { storage } from '../../utils/cloudinary-storage';
+import { storage } from '../../utils/cloudinary.storage';
 import { File as MulterFile } from 'multer';
 
 @ApiTags('Users')

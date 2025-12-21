@@ -34,6 +34,11 @@ enum PostType {
   POLL
 }
 
+enum PostContentFormat {
+  PLAIN_TEXT
+  TIPTAP_JSON
+}
+
 enum ReportStatus {
   PENDING
   REVIEWED
@@ -44,8 +49,7 @@ enum NotificationType {
   POST_LIKE
   POST_COMMENT
   FOLLOW
-  POLL_VOTE
-  MENTION
+  NEW_POST
 }
 
 enum VoteType {
@@ -123,6 +127,9 @@ model Post {
   userId     Int
   title      String?
   content    String?
+  contentJson Json?
+  contentText String?
+  contentFormat PostContentFormat @default(TIPTAP_JSON)
   type       PostType      @default(NORMAL)
   visibility PostVisibility @default(PUBLIC)
   status     PostStatus    @default(VISIBLE)
