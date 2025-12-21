@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { RolesGuard } from '../../auth/guard/roles.guard';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { VoteType } from '@prisma/client/wasm';
-import { ReplyCommentDto } from './dto/reply-comment.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { storage } from 'src/utils/cloudinary.storage';
+import { File as MulterFile } from 'multer';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
@@ -15,6 +17,7 @@ export class CommentController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch(':id')
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({ 
     summary: 'Cập nhật bình luận',
     description: 'Chỉnh sửa nội dung bình luận. Chỉ tác giả mới có thể chỉnh sửa.' 
@@ -42,15 +45,34 @@ export class CommentController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/reply')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { storage }))
   @ApiOperation({ 
     summary: 'Trả lời bình luận',
-    description: 'Tạo một bình luận con để trả lời bình luận hiện tại' 
+    description: 'Tạo một bình luận con để trả lời bình luận hiện tại, có thể đính kèm ảnh'
   })
   @ApiParam({ name: 'id', description: 'ID của bình luận cha', type: Number })
-  @ApiBody({ type: ReplyCommentDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'Nội dung bình luận trả lời' },
+        file: { type: 'string', format: 'binary', description: 'Ảnh đính kèm (tùy chọn)' }
+      }
+    }
+  })
   @ApiResponse({ status: 201, description: 'Trả lời thành công' })
-  async reply(@Param('id') id: string, @Body() dto: ReplyCommentDto, @Req() req) {
-    return this.commentService.reply(+id, req.user.id, dto);
+  async reply(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Req() req,
+    @UploadedFile() file?: MulterFile,
+  ) {
+    const imageUrl = file && (file as any).secure_url ? (file as any).secure_url : undefined;
+    return this.commentService.reply(+id, req.user.id, {
+      content: body.content,
+      imageUrl,
+    });
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)

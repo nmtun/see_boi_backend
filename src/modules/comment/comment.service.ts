@@ -56,6 +56,7 @@ export class CommentService {
         userId,
         parentId: commentId,
         content: dto.content,
+        imageUrl: dto.imageUrl,
       },
     });
 
