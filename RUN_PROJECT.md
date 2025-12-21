@@ -1,6 +1,36 @@
 # Hướng dẫn cài đặt & chạy dự án
 
-## 1. Cài đặt dependencies
+## 🚀 Cách nhanh nhất: Sử dụng script tự động
+
+### macOS / Linux
+
+**Lần đầu setup:**
+```bash
+./setup.sh
+```
+
+**Chạy dự án (sau khi đã setup):**
+```bash
+./run.sh
+```
+
+### Windows
+
+**Lần đầu setup:**
+```cmd
+setup.bat
+```
+
+**Chạy dự án (sau khi đã setup):**
+```cmd
+run.bat
+```
+
+---
+
+## 📝 Hướng dẫn thủ công (nếu cần)
+
+### 1. Cài đặt dependencies
 
 ```bash
 cd backend
