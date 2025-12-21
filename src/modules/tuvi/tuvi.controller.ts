@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { TuViService } from './tuvi.service';
 import { CreateTuViChartDto } from './dto/create-tuvi-chart.dto';
-import { TuViChart } from './tuvi.interface'; 
+import { TuViChart, TuViChartResponse } from './tuvi.interface'; 
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { RolesGuard } from '../../auth/guard/roles.guard'; 
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
@@ -35,7 +35,7 @@ export class TuViController {
   async createTuViChart(
     @Body() createTuViChartDto: CreateTuViChartDto,
     @Req() req,
-  ): Promise<TuViChart> {
+  ): Promise<TuViChartResponse> {
     const userId = req.user.id;
     return this.tuviService.generateTuViChart(userId, createTuViChartDto);
   }
