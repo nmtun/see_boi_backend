@@ -21,6 +21,7 @@ import {
   THIEN_CAN_ARRAY,
   DIA_CHI_ARRAY,
   CUNG_NAMES_ARRAY,
+  TuViChartResponse,
 } from './tuvi.interface';
 import { GoogleGeminiService } from '../gemini/google-gemini.service';
 import { Solar, Lunar } from 'lunar-javascript';
@@ -59,7 +60,7 @@ export class TuViService {
   constructor(
     private prisma: PrismaService,
     private googleGeminiService: GoogleGeminiService,
-  ) {}
+  ) { }
 
   private readonly logger = new Logger(TuViService.name);
 
@@ -83,7 +84,7 @@ export class TuViService {
 
     const canYear = CAN_MAP_CN_VN[lunar.getYearGan()] || 'Giáp';
     const chiYear = CHI_MAP_CN_VN[lunar.getYearZhi()] || 'Tý';
-    
+
     return {
       day: lunar.getDay(),
       month: lunar.getMonth(),
@@ -110,7 +111,7 @@ export class TuViService {
     const canIdx = THIEN_CAN_ARRAY.indexOf(canYear);
     const startCanMap = [2, 4, 6, 8, 0];
     const startCanOfTiger = startCanMap[canIdx % 5];
-    let steps = menhBranchIdx - 2; 
+    let steps = menhBranchIdx - 2;
     if (steps < 0) steps += 12;
     const menhCan = THIEN_CAN_ARRAY[(startCanOfTiger + steps) % 10];
     const menhChi = DIA_CHI_ARRAY[menhBranchIdx];
@@ -132,7 +133,7 @@ export class TuViService {
   }
 
 
-  async generateTuViChart(userId: number, dto: CreateTuViChartDto): Promise<TuViChart> {
+  async generateTuViChart(userId: number, dto: CreateTuViChartDto): Promise<TuViChartResponse> {
     try {
       const isLunarInput = dto.isLunar ?? false;
 
@@ -194,7 +195,7 @@ export class TuViService {
           birthHour: dto.birthHour,
           gender: dto.gender,
           birthPlace: dto.birthPlace,
-          isLunar: isLunarInput, 
+          isLunar: isLunarInput,
           can: canYear,
           chi: chiYear,
           menh: menhElement
@@ -204,14 +205,14 @@ export class TuViService {
         interpretationAI: null
       };
 
-      await this.prisma.userTuViChart.create({
+      const newRecord = await this.prisma.userTuViChart.create({
         data: {
           userId,
           birthDate: solarDate,
           birthHour: dto.birthHour,
           gender: dto.gender as 'nam' | 'nữ',
           birthPlace: dto.birthPlace,
-          isLunar: isLunarInput, 
+          isLunar: isLunarInput,
           can: canYear,
           chi: chiYear,
           menhElement,
@@ -221,8 +222,11 @@ export class TuViService {
           updatedAt: new Date(),
         }
       });
-
-      return chart;
+      const responsedChart:TuViChartResponse={
+        chartId : newRecord.id,
+        output: chart
+      } 
+      return responsedChart;
 
     } catch (error) {
       this.logger.error(`Error: ${error.message}`, error.stack);
@@ -246,18 +250,18 @@ export class TuViService {
     if (!record || record.userId !== userId) throw new ForbiddenException('Lỗi quyền truy cập');
 
     const chart = (typeof record.chartData === 'string' ? JSON.parse(record.chartData) : record.chartData) as TuViChart;
-    const summary = chart.houses.map(h => 
+    const summary = chart.houses.map(h =>
       `- ${h.cung_name} (${h.branch}): ${h.major_stars.join(', ') || 'Vô chính diệu'}`
     ).join('\n');
 
     const prompt = `Luận giải tử vi ngắn gọn:\n${summary}`;
     const aiResp = await this.googleGeminiService.generateText(prompt);
-    
+
     chart.interpretationAI = aiResp;
     await this.prisma.userTuViChart.update({
       where: { id: chartId },
       data: { chartData: chart as unknown as Prisma.InputJsonValue, updatedAt: new Date() }
     });
-    return { "aiResponse" :aiResp};
+    return { "aiResponse": aiResp };
   }
 }

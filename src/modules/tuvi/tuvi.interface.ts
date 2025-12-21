@@ -77,6 +77,11 @@ export interface TuViChart {
   interpretationAI: string | null;
 }
 
+export interface TuViChartResponse {
+  chartId : number;
+  output: TuViChart;
+}
+
 export const INTERP_TEMPLATES: Record<CUNG_NAME, string> = {
   Mệnh: 'Mệnh có {stars}: {comment}',
   'Huynh đệ': 'Huynh đệ có {stars}: {comment}',
