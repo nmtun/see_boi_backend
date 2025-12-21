@@ -95,7 +95,7 @@ model User {
   notifications Notification[]
   reports     Report[] @relation("Reporter")
 
-  // Add missing relations:
+  tuviCharts UserTuViChart[]
   commentVotes CommentVote[]
   collections  Collection[]
   bookmarks    Bookmark[]
@@ -374,4 +374,31 @@ model PostView {
   user     User? @relation(fields: [userId], references: [id])
 
   @@id([postId, viewedAt])
+}
+
+enum TuViChartStatus {
+  GENERATED   
+  AI_INTERPRETED 
+  EXPERT_INTERPRETED 
+  DELETED
+}
+
+model UserTuViChart {
+  id               Int                @id @default(autoincrement())           
+  userId           Int
+  birthDate        DateTime           
+  birthHour        Float              
+  gender           String             
+  birthPlace       String?            
+  isLunar          Boolean            
+  can              String             
+  chi              String             
+  menhElement      String             
+  chartData        Json               
+  interpretationAI String?            
+  status           TuViChartStatus    
+  createdAt        DateTime           
+  updatedAt        DateTime           
+
+  user             User               @relation(fields: [userId], references: [id])
 }
