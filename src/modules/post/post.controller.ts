@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UseInterceptors } from '@nestjs/common';
 import { PostService } from './post.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
@@ -8,7 +8,11 @@ import { RolesGuard } from '../../auth/guard/roles.guard';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { PostVisibility } from '@prisma/client';
 import { PollService } from '../poll/poll.service';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { storage } from '../../utils/cloudinary.storage';
+import { File as MulterFile } from 'multer';
+import { UploadedFile } from '@nestjs/common';
 
 @ApiTags('Posts')
 @ApiBearerAuth()
@@ -223,24 +227,32 @@ export class PostController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/comment')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { storage }))
   @ApiOperation({
     summary: 'Bình luận bài viết',
-    description: 'Thêm bình luận mới cho bài viết. Có thể trả lời bình luận khác bằng cách truyền parentId.'
+    description: 'Thêm bình luận mới cho bài viết. Có thể gửi kèm ảnh (file).'
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        content: { type: 'string', description: 'Nội dung bình luận', example: 'Đây là bình luận của tôi' },
-        parentId: { type: 'number', description: 'ID của bình luận cha (nếu đây là reply, có thể bỏ trống)', example: 1 }
-      },
-      required: ['content']
+        content: { type: 'string', description: 'Nội dung bình luận' },
+        file: { type: 'string', format: 'binary', description: 'Ảnh đính kèm (tùy chọn)' }
+      }
     }
   })
   @ApiResponse({ status: 201, description: 'Bình luận thành công' })
-  async commentOnPost(@Param('id') id: string, @Req() req, @Body('content') content: string, @Body('parentId') parentId?: number) {
-    const comment = await this.postService.commentOnPost(+id, req.user.id, content, parentId);
+  async commentOnPost(
+    @Param('id') id: string,
+    @Req() req,
+    @Body() body: any,
+    @UploadedFile() file?: MulterFile
+  ) {
+    const imageUrl = file && (file as any).secure_url ? (file as any).secure_url : undefined;
+    const content = body.content;
+    const comment = await this.postService.commentOnPost(+id, req.user.id, content, undefined, imageUrl);
     return comment;
   }
 
@@ -364,5 +376,33 @@ export class PostController {
   async getPostsByUser(@Param('id') id: string) {
     const posts = await this.postService.getPostsByUser(+id);
     return posts;
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Post('upload-image')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { storage }))
+  @ApiOperation({
+    summary: 'Upload ảnh lên Cloudinary',
+    description: 'Upload ảnh lên Cloudinary và trả về URL ảnh'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'File ảnh để upload'
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 201, description: 'Upload thành công' })
+  async uploadImage(@UploadedFile() file?: MulterFile) {
+    if (file && (file as any).secure_url) {
+      return { imageUrl: (file as any).secure_url };
+    }
+    throw new Error('Upload failed');
   }
 }

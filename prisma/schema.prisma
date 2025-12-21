@@ -181,6 +181,7 @@ model Comment {
   replies     Comment[] @relation("CommentReply")
   votes       CommentVote[]
   reports     Report[]
+  imageUrl    String?
 }
 
 //////////////////////////////////////////////////

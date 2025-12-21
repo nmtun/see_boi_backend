@@ -5,6 +5,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PostContentFormat, PostStatus, PostVisibility, Prisma } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
+import { File as MulterFile } from 'multer';
 
 @Injectable()
 export class PostService {
@@ -313,7 +314,7 @@ export class PostService {
   }
 
   // tạo comment cho bài viết
-  async commentOnPost(postId: number, userId: number, content: string, parentId?: number) { // parentId để hỗ trợ reply
+  async commentOnPost(postId: number, userId: number, content: string, parentId?: number, imageUrl?: string) { // parentId để hỗ trợ reply
     const post = await this.prisma.post.findUnique({
       where: {
         id: postId
@@ -335,6 +336,7 @@ export class PostService {
         userId,
         content,
         parentId,
+        imageUrl,
       },
     });
 
