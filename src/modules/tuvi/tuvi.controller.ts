@@ -47,7 +47,7 @@ export class TuViController {
     description: 'Truy xuất thông tin chi tiết của một lá số Tử Vi. Chỉ người tạo lá số mới có quyền xem.',
   })
   @ApiParam({ name: 'chartId', description: 'ID của lá số Tử Vi', type: Number })
-  @ApiResponse({ status: 200, description: 'Trả về thông tin lá số Tử Vi.'})
+  @ApiResponse({ status: 200, description: 'Trả về thông tin lá số Tử Vi.' })
   @ApiResponse({ status: 400, description: 'ID lá số không hợp lệ (Invalid chartId).' })
   @ApiResponse({ status: 401, description: 'Không được ủy quyền. Yêu cầu JWT token hợp lệ.' })
   @ApiResponse({ status: 403, description: 'Bạn không có quyền truy cập lá số này.' })
