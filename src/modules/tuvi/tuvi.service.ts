@@ -22,6 +22,7 @@ import {
   DIA_CHI_ARRAY,
   CUNG_NAMES_ARRAY,
   TuViChartResponse,
+  ASPECT_WEIGHTS,
 } from './tuvi.interface';
 import { GoogleGeminiService } from '../gemini/google-gemini.service';
 import { Solar, Lunar } from 'lunar-javascript';
@@ -132,6 +133,61 @@ export class TuViService {
     return (2 + posFromTiger) % 12;
   }
 
+  private getStarScore(stars: string[]): number {
+    if (!stars || stars.length === 0) return 3;
+    const topStars = ['Tử Vi', 'Thiên Phủ', 'Thái Dương', 'Thái Âm'];
+    const goodStars = ['Thiên Cơ', 'Thiên Lương', 'Thiên Tướng', 'Vũ Khúc'];
+    const mediumStars = ['Tham Lang', 'Cự Môn', 'Liêm Trinh', 'Thiên Đồng'];
+    const hardStars = ['Thất Sát', 'Phá Quân'];
+    
+    let totalScore = 0;
+    let count = 0;
+    
+    stars.forEach(star => {
+      if (topStars.includes(star)) totalScore += 10;
+      else if (goodStars.includes(star)) totalScore += 8;
+      else if (mediumStars.includes(star)) totalScore += 6;
+      else if (hardStars.includes(star)) totalScore += 4;
+      else return;
+      count++;
+    });
+    
+    return count > 0 ? Math.round(totalScore / count) : 5;
+  }
+
+  private calculateAspects(houses: House[]): AspectScores {
+    const rawScores = { personality: 0, career: 0, love: 0, wealth: 0, health: 0 };
+    
+    houses.forEach(house => {
+      const starScore = this.getStarScore(house.major_stars);
+      const weights = ASPECT_WEIGHTS[house.cung_name];
+      
+      if (weights) {
+        rawScores.personality += starScore * weights[0];
+        rawScores.career += starScore * weights[1];
+        rawScores.love += starScore * weights[2];
+        rawScores.wealth += starScore * weights[3];
+        rawScores.health += starScore * weights[4];
+      }
+    });
+    
+    const maxValue = Math.max(...Object.values(rawScores));
+    const normalized: AspectScores = {
+      personality: maxValue > 0 ? Math.round((rawScores.personality / maxValue) * 10) : 5,
+      career: maxValue > 0 ? Math.round((rawScores.career / maxValue) * 10) : 5,
+      love: maxValue > 0 ? Math.round((rawScores.love / maxValue) * 10) : 5,
+      wealth: maxValue > 0 ? Math.round((rawScores.wealth / maxValue) * 10) : 5,
+      health: maxValue > 0 ? Math.round((rawScores.health / maxValue) * 10) : 5,
+    };
+    
+    Object.keys(normalized).forEach(key => {
+      if (normalized[key] < 1) normalized[key] = 1;
+      if (normalized[key] > 10) normalized[key] = 10;
+    });
+    
+    return normalized;
+  }
+
 
   async generateTuViChart(userId: number, dto: CreateTuViChartDto): Promise<TuViChartResponse> {
     try {
@@ -187,7 +243,7 @@ export class TuViService {
         h.analysis = `${h.cung_name} có ${starStr}`;
       });
 
-      const aspects: AspectScores = { personality: 5, career: 5, love: 5, wealth: 5, health: 5 };
+      const aspects: AspectScores = this.calculateAspects(houses);
 
       const chart: TuViChart = {
         input: {
