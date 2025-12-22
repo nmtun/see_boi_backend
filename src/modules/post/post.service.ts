@@ -314,7 +314,7 @@ export class PostService {
   }
 
   // tạo comment cho bài viết
-  async commentOnPost(postId: number, userId: number, content: string, parentId?: number, imageUrl?: string) { // parentId để hỗ trợ reply
+  async commentOnPost(postId: number, userId: number, content: string, parentId?: number, isAnonymous?: boolean) { // parentId để hỗ trợ reply
     const post = await this.prisma.post.findUnique({
       where: {
         id: postId
@@ -324,7 +324,9 @@ export class PostService {
     if (!post || post.status !== PostStatus.VISIBLE || post.isDraft) throw new NotFoundException('Post not found or not visible');
 
     if (parentId) {
-      const parentComment = await this.prisma.comment.findUnique({ where: { id: parentId } });
+      const parentComment = await this.prisma.comment.findUnique({
+        where: { id: parentId },
+      });
       if (!parentComment || parentComment.postId !== postId) {
         throw new NotFoundException('Parent comment not found');
       }
@@ -336,7 +338,16 @@ export class PostService {
         userId,
         content,
         parentId,
-        imageUrl,
+        isAnonymous: isAnonymous ?? false,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
       },
     });
 
@@ -356,42 +367,188 @@ export class PostService {
       this.notificationGateway.sendComment(post.userId, notification);
     }
 
+    // Broadcast real-time comment to all users viewing this post
+    // Include displayName and isOwner metadata
+    const commentWithMeta = {
+      ...comment,
+      isOwner: false, // FE sẽ tự xác định dựa vào userId
+      displayName: comment.isAnonymous
+        ? 'Ẩn danh'
+        : comment.user?.fullName || 'Unknown',
+      voteCounts: {
+        upvotes: 0,
+        downvotes: 0,
+        total: 0,
+      },
+    };
+    this.notificationGateway.emitNewComment(postId, commentWithMeta);
+
     return comment;
   }
 
   // lấy bình luận của bài viết
-  async getComments(postId: number) {
+  async getComments(
+    postId: number,
+    skip: number = 0,
+    take: number = 5,
+    sort: 'oldest' | 'newest' | 'score' = 'score',
+    viewerId?: number,
+  ) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
     });
     if (!post) throw new NotFoundException('Post not found');
 
-    return this.prisma.comment.findMany({
-      where: {
-        postId,
-        parentId: null
-      },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true,
-          },
+    // Xác định orderBy dựa trên sort
+    let orderBy: any;
+    if (sort === 'oldest') {
+      orderBy = { createdAt: 'asc' };
+    } else if (sort === 'newest') {
+      orderBy = { createdAt: 'desc' };
+    } else {
+      // sort === 'score': không sort ở DB, sẽ sort sau khi tính voteCounts
+      orderBy = { createdAt: 'desc' }; // Tạm lấy mới nhất trước
+    }
+
+    const [comments, totalRootComments, totalAllComments] = await Promise.all([
+      this.prisma.comment.findMany({
+        where: {
+          postId,
+          parentId: null,
         },
-        replies: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            user: {
-              select: {
-                id: true,
-                fullName: true,
-                avatarUrl: true,
+        skip,
+        take,
+        orderBy,
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+            },
+          },
+          votes: true,
+          _count: {
+            select: {
+              votes: true,
+              replies: true,
+            },
+          },
+          replies: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  avatarUrl: true,
+                },
+              },
+              votes: true,
+              _count: {
+                select: {
+                  votes: true,
+                },
               },
             },
           },
         },
+      }),
+      this.prisma.comment.count({
+        where: {
+          postId,
+          parentId: null,
+        },
+      }),
+      this.prisma.comment.count({
+        where: {
+          postId,
+        },
+      }),
+    ]);
+
+    // Calculate vote counts + displayName + isOwner
+    const commentsWithMetadata = comments.map((comment) => {
+      const upvotes = comment.votes.filter((v) => v.type === 'UP').length;
+      const downvotes = comment.votes.filter((v) => v.type === 'DOWN').length;
+      const voteTotal = upvotes - downvotes;
+
+      const isOwner = viewerId === comment.userId;
+      const displayName = isOwner
+        ? 'Bạn'
+        : comment.isAnonymous
+          ? 'Ẩn danh'
+          : comment.user?.fullName || 'Unknown';
+
+      return {
+        ...comment,
+        isOwner,
+        displayName,
+        voteCounts: {
+          upvotes,
+          downvotes,
+          total: voteTotal,
+        },
+        replies: comment.replies.map((reply) => {
+          const replyUpvotes = reply.votes.filter(
+            (v) => v.type === 'UP',
+          ).length;
+          const replyDownvotes = reply.votes.filter(
+            (v) => v.type === 'DOWN',
+          ).length;
+          const replyVoteTotal = replyUpvotes - replyDownvotes;
+
+          const replyIsOwner = viewerId === reply.userId;
+          const replyDisplayName = replyIsOwner
+            ? 'Bạn'
+            : reply.isAnonymous
+              ? 'Ẩn danh'
+              : reply.user?.fullName || 'Unknown';
+
+          return {
+            ...reply,
+            isOwner: replyIsOwner,
+            displayName: replyDisplayName,
+            voteCounts: {
+              upvotes: replyUpvotes,
+              downvotes: replyDownvotes,
+              total: replyVoteTotal,
+            },
+          };
+        }),
+      };
+    });
+
+    // Sort by score nếu cần
+    if (sort === 'score') {
+      commentsWithMetadata.sort(
+        (a, b) => b.voteCounts.total - a.voteCounts.total,
+      );
+    }
+
+    return {
+      comments: commentsWithMetadata,
+      pagination: {
+        total: totalRootComments, // Tổng comment gốc (dùng cho pagination)
+        totalComments: totalAllComments, // ✅ Tổng TẤT CẢ comments (gốc + reply)
+        skip,
+        take,
+        hasMore: skip + take < totalRootComments,
+      },
+    };
+  }
+
+  // lấy số lượng bình luận của bài viết
+  async getCommentCount(postId: number) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    // ✅ Đếm tất cả comments (gốc + reply)
+    return this.prisma.comment.count({
+      where: {
+        postId,
       },
     });
   }

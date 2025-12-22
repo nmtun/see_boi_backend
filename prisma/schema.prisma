@@ -167,21 +167,25 @@ model PostEditHistory {
 //////////////////////////////////////////////////
 
 model Comment {
-  id          Int      @id @default(autoincrement())
-  postId      Int
-  userId      Int
-  parentId    Int?
-  content     String
-  isAnonymous Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  userId    Int
+  content   String
+  parentId  Int?
+  isAnonymous Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  post        Post     @relation(fields: [postId], references: [id])
-  user        User     @relation(fields: [userId], references: [id])
-  parent      Comment? @relation("CommentReply", fields: [parentId], references: [id])
-  replies     Comment[] @relation("CommentReply")
-  votes       CommentVote[]
-  reports     Report[]
-  imageUrl    String?
+  post   Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+  votes  CommentVote[]
+  reports Report[]
+
+  @@index([postId])
+  @@index([userId])
+  @@index([parentId])
 }
 
 //////////////////////////////////////////////////
@@ -193,7 +197,7 @@ model CommentVote {
   userId    Int
   type      VoteType
 
-  comment   Comment @relation(fields: [commentId], references: [id])
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([commentId, userId])
@@ -358,8 +362,8 @@ model Report {
   createdAt  DateTime @default(now())
 
   reporter   User    @relation("Reporter", fields: [reporterId], references: [id])
-  post       Post?   @relation(fields: [postId], references: [id])
-  comment    Comment? @relation(fields: [commentId], references: [id])
+  post       Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
 }
 
 //////////////////////////////////////////////////

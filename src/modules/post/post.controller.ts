@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
+
 import { PostService } from './post.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
@@ -235,33 +236,92 @@ export class PostController {
     schema: {
       type: 'object',
       properties: {
-        content: { type: 'string', description: 'Nội dung bình luận' },
-        file: { type: 'string', format: 'binary', description: 'Ảnh đính kèm (tùy chọn)' }
-      }
+        content: { type: 'string', description: 'Nội dung bình luận', example: 'Đây là bình luận của tôi' },
+        parentId: { type: 'number', description: 'ID của bình luận cha (nếu đây là reply, có thể bỏ trống)', example: 1 },
+        isAnonymous: {
+          type: 'boolean',
+          description: 'Ẩn danh hay không',
+          example: false,
+        },
+      },
+      required: ['content']
     }
   })
   @ApiResponse({ status: 201, description: 'Bình luận thành công' })
   async commentOnPost(
     @Param('id') id: string,
     @Req() req,
-    @Body() body: any,
-    @UploadedFile() file?: MulterFile
+    @Body('content') content: string,
+    @Body('parentId') parentId?: number,
+    @Body('isAnonymous') isAnonymous?: boolean,
   ) {
-    const imageUrl = file && (file as any).secure_url ? (file as any).secure_url : undefined;
-    const content = body.content;
-    const comment = await this.postService.commentOnPost(+id, req.user.id, content, undefined, imageUrl);
+    const comment = await this.postService.commentOnPost(
+      +id,
+      req.user.id,
+      content,
+      parentId,
+      isAnonymous,
+    );
     return comment;
   }
 
   @Get(':id/comments')
   @ApiOperation({
     summary: 'Lấy danh sách bình luận',
-    description: 'Lấy tất cả bình luận của bài viết'
+    description:
+      'Lấy bình luận của bài viết với phân trang. Mặc định trả về 10 bình luận đầu tiên.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
-  @ApiResponse({ status: 200, description: 'Danh sách bình luận' })
-  async getComments(@Param('id') id: string) {
-    return this.postService.getComments(+id);
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách bình luận với pagination',
+    schema: {
+      type: 'object',
+      properties: {
+        comments: { type: 'array' },
+        pagination: {
+          type: 'object',
+          properties: {
+            total: { type: 'number', example: 15 },
+            skip: { type: 'number', example: 0 },
+            take: { type: 'number', example: 10 },
+            hasMore: { type: 'boolean', example: true },
+          },
+        },
+      },
+    },
+  })
+  async getComments(
+    @Param('id') id: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+    @Query('sort') sort?: 'oldest' | 'newest' | 'score',
+    @Req() req?,
+  ) {
+    const skipNum = skip ? parseInt(skip) : 0;
+    const takeNum = take ? parseInt(take) : 10;
+    const sortBy = sort || 'score'; // Mặc định theo điểm
+    const viewerId = req?.user?.id; // Lấy userId để xác định isOwner
+    return this.postService.getComments(
+      +id,
+      skipNum,
+      takeNum,
+      sortBy,
+      viewerId,
+    );
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get(':id/comments/count')
+  @ApiOperation({
+    summary: 'Lấy số lượng bình luận',
+    description: 'Lấy tổng số bình luận của bài viết',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiResponse({ status: 200, description: 'Số lượng bình luận' })
+  async getCommentCount(@Param('id') id: string) {
+    const count = await this.postService.getCommentCount(+id);
+    return { count };
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
