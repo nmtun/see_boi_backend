@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RolesGuard } from '../../auth/guard/roles.guard';
@@ -78,24 +78,49 @@ export class UserController {
     @UploadedFile() file?: MulterFile
   ) {
     let data: any = { ...dto };
+    
     if (data.birthday && typeof data.birthday === 'string') {
       data.birthday = new Date(data.birthday);
     }
 
     // lấy thông tin user để lấy avatar cũ
     const currentUser = await this.userService.findMe(req.user.id);
-        
-    // Nếu upload file ảnh mới từ Cloudinary
-    if (file && (file as any).secure_url) {
-      if (currentUser.avatarUrl) {
-        // Xoá ảnh cũ trên Cloudinary
-        await this.userService.deleteAvatar(currentUser.avatarUrl);
-      }
-      data.avatarUrl = (file as any).secure_url;
-    }
     
+    // Xử lý avatar: Hỗ trợ cả file upload và URL string
+    // Ưu tiên file upload nếu có cả 2
+    if (file && (file as any).secure_url) {
+      // Trường hợp 1: Upload file ảnh lên Cloudinary
+      if (currentUser.avatarUrl) {
+        // Xoá ảnh cũ trên Cloudinary (chỉ xóa nếu avatar cũ cũng từ Cloudinary)
+        await this.userService.deleteAvatarIfCloudinary(currentUser.avatarUrl);
+      }
+      // Lưu URL string từ Cloudinary response
+      data.avatarUrl = (file as any).secure_url;
+    } else if (dto.avatarUrl && typeof dto.avatarUrl === 'string') {
+      // Trường hợp 2: Gửi URL ảnh trực tiếp (không upload file)
+      // Validate URL hợp lệ
+      if (this.isValidUrl(dto.avatarUrl)) {
+        data.avatarUrl = dto.avatarUrl;
+        // Không xóa avatar cũ vì có thể là URL từ nguồn khác
+      } else {
+        throw new BadRequestException('URL ảnh không hợp lệ. URL phải bắt đầu bằng http:// hoặc https://');
+      }
+    }
+    // Nếu không có file và không có URL, avatarUrl sẽ không được cập nhật
+    
+    // Update database với avatarUrl là string (không phải object)
     const updatedUser = await this.userService.updateMe(req.user.id, data);
     return new User(updatedUser);
+  }
+
+  // Helper method để validate URL
+  private isValidUrl(url: string): boolean {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+      return false;
+    }
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
