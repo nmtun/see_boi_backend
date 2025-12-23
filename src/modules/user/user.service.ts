@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationGateway } from 'src/utils/notification.gateway';
@@ -49,6 +49,9 @@ export class UserService {
 
   // lấy danh sách người theo dõi của user
   async getUserFollowers(userId: number) {
+    if (!userId || isNaN(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
     const followers = await this.prisma.userFollow.findMany({
       where: { followingId: userId },
       include: { follower: true },
@@ -58,6 +61,9 @@ export class UserService {
 
   // lấy danh sách người mà user đang theo dõi
   async getUserFollowing(userId: number) {
+    if (!userId || isNaN(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
     const following = await this.prisma.userFollow.findMany({
       where: { followerId: userId },
       include: { following: true },
@@ -89,6 +95,22 @@ export class UserService {
         followingId,
       },
     });
+  }
+
+  // kiểm tra xem user có đang follow user khác không
+  async isFollowing(followerId: number, followingId: number): Promise<boolean> {
+    if (!followerId || !followingId || isNaN(followerId) || isNaN(followingId)) {
+      return false;
+    }
+    const follow = await this.prisma.userFollow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+    });
+    return !!follow;
   }
 
   // hủy user đang theo dõi mình
