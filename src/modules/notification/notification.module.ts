@@ -7,6 +7,6 @@ import { NotificationGateway } from 'src/utils/notification.gateway';
 @Module({
   controllers: [NotificationController],
   providers: [NotificationService, PrismaService, NotificationGateway],
-  exports: [NotificationService],
+  exports: [NotificationService, NotificationGateway], // Export NotificationGateway để các module khác dùng
 })
 export class NotificationModule {}
