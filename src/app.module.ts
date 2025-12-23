@@ -15,12 +15,14 @@ import { ReportModule } from './modules/report/report.module';
 import { TuViModule } from './modules/tuvi/tuvi.module';
 import { GoogleGeminiModule } from './modules/gemini/google-gemini.module';
 import { NotificationGateway } from './utils/notification.gateway';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
     PrismaModule, 
     AuthModule, UserModule, PostModule, CommentModule, TagModule, CollectionModule, PollModule, BadgeModule, NotificationModule, ReportModule, TuViModule ,
-    GoogleGeminiModule
+    GoogleGeminiModule,
+    UploadModule
   ],
   controllers: [], 
   providers: [NotificationGateway],  

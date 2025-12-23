@@ -43,11 +43,11 @@ export class UserController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch('me')
-  @UseInterceptors(FileInterceptor('avatar', { storage }))
+  @UseInterceptors(FileInterceptor('avatarUrl', { storage }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ 
     summary: 'Cập nhật thông tin người dùng hiện tại',
-    description: 'Cập nhật thông tin cá nhân. Upload file ảnh ở trường "avatar" (file). Các trường khác nhập text.' 
+    description: 'Cập nhật thông tin cá nhân. Upload file ảnh ở trường "avatarUrl" (file). Các trường khác nhập text.' 
   })
   @ApiBody({
     schema: {
@@ -59,7 +59,7 @@ export class UserController {
         birthday: { type: 'string', format: 'date', example: '1990-01-01' },
         gender: { type: 'string', example: 'Nam' },
         bio: { type: 'string', example: 'Developer at ABC Company' },
-        avatar: { 
+        avatarUrl: { 
           type: 'string', 
           format: 'binary',
           description: 'File ảnh đại diện (upload từ máy tính)' 
@@ -81,9 +81,16 @@ export class UserController {
     if (data.birthday && typeof data.birthday === 'string') {
       data.birthday = new Date(data.birthday);
     }
+
+    // lấy thông tin user để lấy avatar cũ
+    const currentUser = await this.userService.findMe(req.user.id);
         
     // Nếu upload file ảnh mới từ Cloudinary
     if (file && (file as any).secure_url) {
+      if (currentUser.avatarUrl) {
+        // Xoá ảnh cũ trên Cloudinary
+        await this.userService.deleteAvatar(currentUser.avatarUrl);
+      }
       data.avatarUrl = (file as any).secure_url;
     }
     
