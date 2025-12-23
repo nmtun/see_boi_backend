@@ -1,21 +1,42 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PostContentFormat, PostStatus, PostVisibility, Prisma } from '@prisma/client';
+import {
+  PostContentFormat,
+  PostStatus,
+  PostVisibility,
+  Prisma,
+} from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { File as MulterFile } from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import * as fs from 'fs';
 
 @Injectable()
 export class PostService {
-  constructor(private readonly prisma: PrismaService, private notificationGateway: NotificationGateway) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private notificationGateway: NotificationGateway,
+  ) {}
 
-  private validateContentJsonSize(contentJson: Record<string, any>, maxBytes = 200_000) {
+  private validateContentJsonSize(
+    contentJson: Record<string, any>,
+    maxBytes = 200_000,
+  ) {
     // Xấp xỉ byte-length. Với JSON ASCII là khá sát; unicode có thể lớn hơn một chút.
     const size = Buffer.byteLength(JSON.stringify(contentJson), 'utf8');
     if (size > maxBytes) {
-      throw new BadRequestException(`contentJson quá lớn (${size} bytes). Giới hạn: ${maxBytes} bytes.`);
+      throw new BadRequestException(
+        `contentJson quá lớn (${size} bytes). Giới hạn: ${maxBytes} bytes.`,
+      );
     }
   }
 
@@ -31,15 +52,20 @@ export class PostService {
       this.validateContentJsonSize(dto.contentJson);
     }
 
-    const contentFormat =
-      dto.contentJson ? PostContentFormat.TIPTAP_JSON : dto.content ? PostContentFormat.PLAIN_TEXT : PostContentFormat.TIPTAP_JSON;
+    const contentFormat = dto.contentJson
+      ? PostContentFormat.TIPTAP_JSON
+      : dto.content
+        ? PostContentFormat.PLAIN_TEXT
+        : PostContentFormat.TIPTAP_JSON;
 
     const post = await this.prisma.post.create({
       data: {
         userId,
         title: dto.title,
         content: dto.content,
-        contentJson: dto.contentJson ? (dto.contentJson as Prisma.InputJsonValue) : undefined,
+        contentJson: dto.contentJson
+          ? (dto.contentJson as Prisma.InputJsonValue)
+          : undefined,
         contentText: dto.contentText ?? null,
         contentFormat,
         type: dto.type,
@@ -48,10 +74,10 @@ export class PostService {
         status: PostStatus.VISIBLE,
         tags: tagIds
           ? {
-            create: tagIds.map(tagId => ({
-              tagId,
-            })),
-          }
+              create: tagIds.map((tagId) => ({
+                tagId,
+              })),
+            }
           : undefined,
       },
       include: {
@@ -72,7 +98,7 @@ export class PostService {
       });
 
       const notifications = await Promise.all(
-        followers.map(follower =>
+        followers.map((follower) =>
           this.prisma.notification.create({
             data: {
               userId: follower.followerId,
@@ -80,12 +106,15 @@ export class PostService {
               content: 'Người bạn theo dõi vừa đăng bài viết mới',
               refId: post.id,
             },
-          })
-        )
+          }),
+        ),
       );
 
       for (const notification of notifications) {
-        this.notificationGateway.sendNotification(notification.userId, notification);
+        this.notificationGateway.sendNotification(
+          notification.userId,
+          notification,
+        );
       }
     }
 
@@ -118,9 +147,15 @@ export class PostService {
 
     let nextContentFormat: PostContentFormat | undefined = undefined;
     if (dto.contentJson !== undefined || dto.content !== undefined) {
-      const willUseJson = dto.contentJson !== undefined ? !!dto.contentJson : !!post.contentJson;
-      const willUseLegacy = dto.content !== undefined ? !!dto.content : !!post.content;
-      nextContentFormat = willUseJson ? PostContentFormat.TIPTAP_JSON : willUseLegacy ? PostContentFormat.PLAIN_TEXT : PostContentFormat.TIPTAP_JSON;
+      const willUseJson =
+        dto.contentJson !== undefined ? !!dto.contentJson : !!post.contentJson;
+      const willUseLegacy =
+        dto.content !== undefined ? !!dto.content : !!post.content;
+      nextContentFormat = willUseJson
+        ? PostContentFormat.TIPTAP_JSON
+        : willUseLegacy
+          ? PostContentFormat.PLAIN_TEXT
+          : PostContentFormat.TIPTAP_JSON;
     }
 
     const normalizedTagIds = tagIds ? Array.from(new Set(tagIds)) : undefined;
@@ -129,8 +164,12 @@ export class PostService {
       where: { id: postId },
       data: {
         ...rest,
-        contentJson: dto.contentJson === undefined ? undefined : (dto.contentJson as Prisma.InputJsonValue),
-        contentText: dto.contentText === undefined ? undefined : dto.contentText ?? null,
+        contentJson:
+          dto.contentJson === undefined
+            ? undefined
+            : (dto.contentJson as Prisma.InputJsonValue),
+        contentText:
+          dto.contentText === undefined ? undefined : (dto.contentText ?? null),
         contentFormat: nextContentFormat,
         tags: normalizedTagIds
           ? {
@@ -182,7 +221,8 @@ export class PostService {
         poll: { include: { options: true } },
       },
     });
-    if (!post || post.status !== PostStatus.VISIBLE || post.isDraft) throw new NotFoundException('Post not found or not visible');
+    if (!post || post.status !== PostStatus.VISIBLE || post.isDraft)
+      throw new NotFoundException('Post not found or not visible');
 
     // log view
     await this.prisma.postView.create({
@@ -202,7 +242,7 @@ export class PostService {
         status: PostStatus.DELETED,
         deletedAt: new Date(),
       },
-    })
+    });
   }
 
   async restore(postId: number, userId: number) {
@@ -212,14 +252,14 @@ export class PostService {
         status: PostStatus.VISIBLE,
         deletedAt: null,
       },
-    })
+    });
   }
 
   async getDeletedPosts(userId: number) {
     return this.prisma.post.findMany({
       where: {
         userId,
-        status: PostStatus.DELETED
+        status: PostStatus.DELETED,
       },
       orderBy: { deletedAt: 'desc' },
     });
@@ -258,7 +298,7 @@ export class PostService {
 
     // Chỉ gửi thông báo nếu người like khác chủ bài viết
     if (post.userId !== userId) {
-     const notification = await this.prisma.notification.create({
+      const notification = await this.prisma.notification.create({
         data: {
           userId: post.userId,
           type: 'POST_LIKE',
@@ -314,14 +354,22 @@ export class PostService {
   }
 
   // tạo comment cho bài viết
-  async commentOnPost(postId: number, userId: number, content: string, parentId?: number, isAnonymous?: boolean) { // parentId để hỗ trợ reply
+  async commentOnPost(
+    postId: number,
+    userId: number,
+    content: string,
+    parentId?: number,
+    isAnonymous?: boolean,
+    files?: MulterFile[],
+  ) {
     const post = await this.prisma.post.findUnique({
       where: {
-        id: postId
-      }
+        id: postId,
+      },
     });
 
-    if (!post || post.status !== PostStatus.VISIBLE || post.isDraft) throw new NotFoundException('Post not found or not visible');
+    if (!post || post.status !== PostStatus.VISIBLE || post.isDraft)
+      throw new NotFoundException('Post not found or not visible');
 
     if (parentId) {
       const parentComment = await this.prisma.comment.findUnique({
@@ -329,6 +377,29 @@ export class PostService {
       });
       if (!parentComment || parentComment.postId !== postId) {
         throw new NotFoundException('Parent comment not found');
+      }
+    }
+
+    // Upload tất cả ảnh lên Cloudinary
+    const imageUrls: string[] = [];
+    if (files && files.length > 0) {
+      for (const file of files) {
+        // Nếu file đã được Cloudinary middleware xử lý
+        if ((file as any).secure_url) {
+          imageUrls.push((file as any).secure_url);
+        } else {
+          // Upload thủ công nếu chưa
+          const result = await cloudinary.uploader.upload(file.path, {
+            folder: 'comments',
+            resource_type: 'auto',
+          });
+          imageUrls.push(result.secure_url);
+
+          // Xóa file tạm nếu tồn tại
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        }
       }
     }
 
@@ -346,6 +417,44 @@ export class PostService {
             id: true,
             fullName: true,
             avatarUrl: true,
+          },
+        },
+        images: {
+          select: {
+            id: true,
+            url: true,
+          },
+        },
+      },
+    });
+
+    // Lưu images vào bảng Image
+    if (imageUrls.length > 0) {
+      await this.prisma.image.createMany({
+        data: imageUrls.map((url) => ({
+          url,
+          type: 'COMMENT',
+          entityId: comment.id,
+          commentId: comment.id,
+        })),
+      });
+    }
+
+    // Fetch lại comment với images
+    const commentWithImages = await this.prisma.comment.findUnique({
+      where: { id: comment.id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+        images: {
+          select: {
+            id: true,
+            url: true,
           },
         },
       },
@@ -369,12 +478,17 @@ export class PostService {
 
     // Broadcast real-time comment to all users viewing this post
     // Include displayName and isOwner metadata
+    if (!commentWithImages) {
+      throw new NotFoundException('Comment not found after creation');
+    }
+
     const commentWithMeta = {
-      ...comment,
+      ...commentWithImages,
+      images: commentWithImages.images.map((img) => img.url),
       isOwner: false, // FE sẽ tự xác định dựa vào userId
-      displayName: comment.isAnonymous
+      displayName: commentWithImages.isAnonymous
         ? 'Ẩn danh'
-        : comment.user?.fullName || 'Unknown',
+        : commentWithImages.user?.fullName || 'Unknown',
       voteCounts: {
         upvotes: 0,
         downvotes: 0,
@@ -383,7 +497,7 @@ export class PostService {
     };
     this.notificationGateway.emitNewComment(postId, commentWithMeta);
 
-    return comment;
+    return commentWithImages;
   }
 
   // lấy bình luận của bài viết
@@ -428,6 +542,12 @@ export class PostService {
             },
           },
           votes: true,
+          images: {
+            select: {
+              id: true,
+              url: true,
+            },
+          },
           _count: {
             select: {
               votes: true,
@@ -445,6 +565,12 @@ export class PostService {
                 },
               },
               votes: true,
+              images: {
+                select: {
+                  id: true,
+                  url: true,
+                },
+              },
               _count: {
                 select: {
                   votes: true,
@@ -482,6 +608,7 @@ export class PostService {
 
       return {
         ...comment,
+        images: comment.images?.map((img) => img.url) || [],
         isOwner,
         displayName,
         voteCounts: {
@@ -507,6 +634,7 @@ export class PostService {
 
           return {
             ...reply,
+            images: reply.images?.map((img) => img.url) || [],
             isOwner: replyIsOwner,
             displayName: replyDisplayName,
             voteCounts: {
@@ -556,7 +684,7 @@ export class PostService {
   // bookmark bài viết
   async bookmark(postId: number, userId: number, collectionId?: number) {
     const post = await this.prisma.post.findUnique({
-      where: { id: postId }
+      where: { id: postId },
     });
     if (!post || post.status !== PostStatus.VISIBLE || post.isDraft) {
       throw new NotFoundException('Post not found or not visible');
@@ -613,7 +741,7 @@ export class PostService {
         postId,
         expiresAt: dto.expiresAt,
         options: {
-          create: dto.options.map(text => ({ text })),
+          create: dto.options.map((text) => ({ text })),
         },
       },
       include: {
@@ -634,7 +762,11 @@ export class PostService {
   }
 
   // update visibility
-  async updateVisibility(postId: number, userId: number, visibility: PostVisibility) {
+  async updateVisibility(
+    postId: number,
+    userId: number,
+    visibility: PostVisibility,
+  ) {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException();
     if (post.userId !== userId) throw new ForbiddenException();

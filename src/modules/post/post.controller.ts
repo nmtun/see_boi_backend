@@ -1,4 +1,18 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, UseInterceptors, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
+  Query,
+  UseInterceptors,
+  Logger,
+  UploadedFiles,
+} from '@nestjs/common';
 
 import { PostService } from './post.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -10,8 +24,16 @@ import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { OptionalJwtAuthGuard } from '../../auth/guard/optional-jwt.guard';
 import { PostVisibility } from '@prisma/client';
 import { PollService } from '../poll/poll.service';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+} from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { storage } from '../../utils/cloudinary.storage';
 import { File as MulterFile } from 'multer';
 import { UploadedFile } from '@nestjs/common';
@@ -25,13 +47,14 @@ export class PostController {
   constructor(
     private readonly postService: PostService,
     private readonly pollService: PollService, // Inject PollService
-  ) { }
+  ) {}
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post()
   @ApiOperation({
     summary: 'Tạo bài viết mới',
-    description: 'Tạo một bài viết mới. Có thể là bài viết thường hoặc bài viết có poll. Tất cả các trường đều là optional.'
+    description:
+      'Tạo một bài viết mới. Có thể là bài viết thường hoặc bài viết có poll. Tất cả các trường đều là optional.',
   })
   @ApiBody({ type: CreatePostDto })
   @ApiResponse({
@@ -48,13 +71,18 @@ export class PostController {
   @Patch(':id')
   @ApiOperation({
     summary: 'Cập nhật bài viết',
-    description: 'Cập nhật thông tin bài viết. Chỉ tác giả mới có thể cập nhật.'
+    description:
+      'Cập nhật thông tin bài viết. Chỉ tác giả mới có thể cập nhật.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({ type: UpdatePostDto })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
   @ApiResponse({ status: 403, description: 'Không có quyền cập nhật' })
-  async update(@Param('id') id: string, @Body() dto: UpdatePostDto, @Req() req) {
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdatePostDto,
+    @Req() req,
+  ) {
     const post = await this.postService.update(+id, req.user.id, dto);
     return new Posts(post);
   }
@@ -62,7 +90,8 @@ export class PostController {
   @Get()
   @ApiOperation({
     summary: 'Lấy danh sách tất cả bài viết',
-    description: 'Lấy tất cả bài viết công khai trong hệ thống. Nếu bài viết có poll, sẽ trả kèm kết quả poll.'
+    description:
+      'Lấy tất cả bài viết công khai trong hệ thống. Nếu bài viết có poll, sẽ trả kèm kết quả poll.',
   })
   @ApiResponse({ status: 200, description: 'Danh sách bài viết' })
   async findAll() {
@@ -79,13 +108,13 @@ export class PostController {
           ...new Posts(post),
           poll: post.poll
             ? {
-              ...post.poll,
-              options: post.poll.options,
-              result: pollResult,
-            }
+                ...post.poll,
+                options: post.poll.options,
+                result: pollResult,
+              }
             : null,
         };
-      })
+      }),
     );
   }
 
@@ -93,7 +122,8 @@ export class PostController {
   @Get(':id')
   @ApiOperation({
     summary: 'Lấy chi tiết bài viết',
-    description: 'Lấy thông tin chi tiết của một bài viết theo ID. Có thể truy cập không cần đăng nhập, nhưng nếu có token sẽ log view.'
+    description:
+      'Lấy thông tin chi tiết của một bài viết theo ID. Có thể truy cập không cần đăng nhập, nhưng nếu có token sẽ log view.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Thông tin bài viết' })
@@ -101,11 +131,11 @@ export class PostController {
   async findOne(@Param('id') id: string, @Req() req) {
     // viewerId là optional - chỉ truyền nếu có user đăng nhập
     const viewerId = req.user?.id;
-    
+
     // Log username của người xem post
     const username = req.user?.userName || 'Ẩn danh';
     this.logger.log(`Người dùng "${username}" đã yêu cầu xem post ID: ${id}`);
-    
+
     const post = await this.postService.findById(+id, viewerId);
 
     // Nếu có poll, trả về luôn kết quả poll
@@ -118,10 +148,10 @@ export class PostController {
       ...new Posts(post),
       poll: post.poll
         ? {
-          ...post.poll,
-          options: post.poll.options,
-          result: pollResult,
-        }
+            ...post.poll,
+            options: post.poll.options,
+            result: pollResult,
+          }
         : null,
     };
   }
@@ -130,7 +160,8 @@ export class PostController {
   @Delete(':id')
   @ApiOperation({
     summary: 'Xóa vĩnh viễn bài viết',
-    description: 'Xóa vĩnh viễn bài viết khỏi hệ thống. Chỉ tác giả mới có thể xóa.'
+    description:
+      'Xóa vĩnh viễn bài viết khỏi hệ thống. Chỉ tác giả mới có thể xóa.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Xóa thành công' })
@@ -144,7 +175,8 @@ export class PostController {
   @Patch(':id/soft-delete')
   @ApiOperation({
     summary: 'Xóa tạm thời bài viết',
-    description: 'Xóa bài viết nhưng vẫn lưu trong hệ thống, có thể khôi phục sau này.'
+    description:
+      'Xóa bài viết nhưng vẫn lưu trong hệ thống, có thể khôi phục sau này.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Xóa tạm thời thành công' })
@@ -157,7 +189,7 @@ export class PostController {
   @Patch(':id/restore')
   @ApiOperation({
     summary: 'Khôi phục bài viết',
-    description: 'Khôi phục bài viết đã xóa tạm thời'
+    description: 'Khôi phục bài viết đã xóa tạm thời',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Khôi phục thành công' })
@@ -170,7 +202,8 @@ export class PostController {
   @Get('deleted/me')
   @ApiOperation({
     summary: 'Lấy danh sách bài viết đã xóa',
-    description: 'Lấy danh sách bài viết đã xóa tạm thời của người dùng hiện tại'
+    description:
+      'Lấy danh sách bài viết đã xóa tạm thời của người dùng hiện tại',
   })
   @ApiResponse({ status: 200, description: 'Danh sách bài viết đã xóa' })
   async getDeletedPosts(@Req() req) {
@@ -181,7 +214,7 @@ export class PostController {
   @Post(':id/like')
   @ApiOperation({
     summary: 'Thích bài viết',
-    description: 'Thêm lượt thích cho bài viết'
+    description: 'Thêm lượt thích cho bài viết',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 201, description: 'Thích thành công' })
@@ -193,7 +226,7 @@ export class PostController {
   @Post(':id/unlike')
   @ApiOperation({
     summary: 'Bỏ thích bài viết',
-    description: 'Xóa lượt thích khỏi bài viết'
+    description: 'Xóa lượt thích khỏi bài viết',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Bỏ thích thành công' })
@@ -204,7 +237,7 @@ export class PostController {
   @Get('trending')
   @ApiOperation({
     summary: 'Lấy bài viết trending',
-    description: 'Lấy danh sách bài viết đang hot/trending'
+    description: 'Lấy danh sách bài viết đang hot/trending',
   })
   @ApiResponse({ status: 200, description: 'Danh sách bài viết trending' })
   async getTrending() {
@@ -215,7 +248,7 @@ export class PostController {
   @Get('drafts/me')
   @ApiOperation({
     summary: 'Lấy danh sách bản nháp',
-    description: 'Lấy tất cả bài viết bản nháp của người dùng hiện tại'
+    description: 'Lấy tất cả bài viết bản nháp của người dùng hiện tại',
   })
   @ApiResponse({ status: 200, description: 'Danh sách bản nháp' })
   async getDrafts(@Req() req) {
@@ -226,7 +259,7 @@ export class PostController {
   @Get(':id/likes')
   @ApiOperation({
     summary: 'Lấy danh sách người thích',
-    description: 'Lấy danh sách người dùng đã thích bài viết này'
+    description: 'Lấy danh sách người dùng đã thích bài viết này',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Danh sách người thích' })
@@ -237,26 +270,41 @@ export class PostController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/comment')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file', { storage }))
+  @UseInterceptors(FilesInterceptor('images', 10, { storage }))
   @ApiOperation({
-    summary: 'Bình luận bài viết',
-    description: 'Thêm bình luận mới cho bài viết. Có thể gửi kèm ảnh (file).'
+    summary: 'Bình luận bài viết với nhiều ảnh',
+    description:
+      'Thêm bình luận mới cho bài viết, có thể đính kèm tối đa 10 ảnh.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        content: { type: 'string', description: 'Nội dung bình luận', example: 'Đây là bình luận của tôi' },
-        parentId: { type: 'number', description: 'ID của bình luận cha (nếu đây là reply, có thể bỏ trống)', example: 1 },
+        content: {
+          type: 'string',
+          description: 'Nội dung bình luận',
+          example: 'Đây là bình luận của tôi',
+        },
+        parentId: {
+          type: 'number',
+          description:
+            'ID của bình luận cha (nếu đây là reply, có thể bỏ trống)',
+          example: 1,
+        },
         isAnonymous: {
           type: 'boolean',
           description: 'Ẩn danh hay không',
           example: false,
         },
+        images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Danh sách ảnh đính kèm (tối đa 10 ảnh)',
+        },
       },
-      required: ['content']
-    }
+      required: ['content'],
+    },
   })
   @ApiResponse({ status: 201, description: 'Bình luận thành công' })
   async commentOnPost(
@@ -265,6 +313,7 @@ export class PostController {
     @Body('content') content: string,
     @Body('parentId') parentId?: number,
     @Body('isAnonymous') isAnonymous?: boolean,
+    @UploadedFiles() files?: MulterFile[],
   ) {
     const comment = await this.postService.commentOnPost(
       +id,
@@ -272,6 +321,7 @@ export class PostController {
       content,
       parentId,
       isAnonymous,
+      files,
     );
     return comment;
   }
@@ -339,12 +389,17 @@ export class PostController {
   @Post(':id/poll')
   @ApiOperation({
     summary: 'Tạo poll cho bài viết',
-    description: 'Thêm poll vào bài viết hiện có. Chỉ tác giả mới có thể thêm poll.'
+    description:
+      'Thêm poll vào bài viết hiện có. Chỉ tác giả mới có thể thêm poll.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({ type: CreatePollDto })
   @ApiResponse({ status: 201, description: 'Tạo poll thành công' })
-  async createPoll(@Param('id') id: string, @Req() req, @Body() dto: CreatePollDto) {
+  async createPoll(
+    @Param('id') id: string,
+    @Req() req,
+    @Body() dto: CreatePollDto,
+  ) {
     const poll = await this.postService.createPoll(+id, req.user.id, dto);
     return poll;
   }
@@ -353,20 +408,33 @@ export class PostController {
   @Post(':id/bookmark')
   @ApiOperation({
     summary: 'Lưu bài viết',
-    description: 'Lưu bài viết vào bookmark. Có thể lưu vào collection cụ thể bằng cách truyền collectionId.'
+    description:
+      'Lưu bài viết vào bookmark. Có thể lưu vào collection cụ thể bằng cách truyền collectionId.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        collectionId: { type: 'number', description: 'ID của collection (có thể bỏ trống)', example: 1 }
-      }
-    }
+        collectionId: {
+          type: 'number',
+          description: 'ID của collection (có thể bỏ trống)',
+          example: 1,
+        },
+      },
+    },
   })
   @ApiResponse({ status: 201, description: 'Lưu thành công' })
-  async bookmark(@Param('id') id: string, @Req() req, @Body('collectionId') collectionId?: number) {
-    const bookmark = await this.postService.bookmark(+id, req.user.id, collectionId);
+  async bookmark(
+    @Param('id') id: string,
+    @Req() req,
+    @Body('collectionId') collectionId?: number,
+  ) {
+    const bookmark = await this.postService.bookmark(
+      +id,
+      req.user.id,
+      collectionId,
+    );
     return bookmark;
   }
 
@@ -374,7 +442,7 @@ export class PostController {
   @Delete(':id/bookmark')
   @ApiOperation({
     summary: 'Bỏ lưu bài viết',
-    description: 'Xóa bài viết khỏi bookmark'
+    description: 'Xóa bài viết khỏi bookmark',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Bỏ lưu thành công' })
@@ -387,21 +455,33 @@ export class PostController {
   @Patch(':id/publish')
   @ApiOperation({
     summary: 'Cập nhật trạng thái xuất bản',
-    description: 'Chuyển bài viết giữa trạng thái bản nháp và đã xuất bản'
+    description: 'Chuyển bài viết giữa trạng thái bản nháp và đã xuất bản',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        isDraft: { type: 'boolean', description: 'true = lưu như bản nháp, false = xuất bản', example: false }
+        isDraft: {
+          type: 'boolean',
+          description: 'true = lưu như bản nháp, false = xuất bản',
+          example: false,
+        },
       },
-      required: ['isDraft']
-    }
+      required: ['isDraft'],
+    },
   })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
-  async updatePublish(@Param('id') id: string, @Req() req, @Body('isDraft') isDraft: boolean) {
-    const post = await this.postService.updatePublish(+id, req.user.id, isDraft);
+  async updatePublish(
+    @Param('id') id: string,
+    @Req() req,
+    @Body('isDraft') isDraft: boolean,
+  ) {
+    const post = await this.postService.updatePublish(
+      +id,
+      req.user.id,
+      isDraft,
+    );
     return new Posts(post);
   }
 
@@ -409,7 +489,8 @@ export class PostController {
   @Patch(':id/visibility')
   @ApiOperation({
     summary: 'Cập nhật mức độ hiển thị',
-    description: 'Thay đổi quyền hiển thị bài viết (PUBLIC, FOLLOWERS, PRIVATE, ANONYMOUS)'
+    description:
+      'Thay đổi quyền hiển thị bài viết (PUBLIC, FOLLOWERS, PRIVATE, ANONYMOUS)',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({
@@ -420,22 +501,30 @@ export class PostController {
           type: 'string',
           enum: ['PUBLIC', 'FOLLOWERS', 'PRIVATE', 'ANONYMOUS'],
           description: 'Mức độ hiển thị',
-          example: 'PUBLIC'
-        }
+          example: 'PUBLIC',
+        },
       },
-      required: ['visibility']
-    }
+      required: ['visibility'],
+    },
   })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
-  async updateVisibility(@Param('id') id: string, @Req() req, @Body('visibility') visibility: PostVisibility) {
-    const post = await this.postService.updateVisibility(+id, req.user.id, visibility);
+  async updateVisibility(
+    @Param('id') id: string,
+    @Req() req,
+    @Body('visibility') visibility: PostVisibility,
+  ) {
+    const post = await this.postService.updateVisibility(
+      +id,
+      req.user.id,
+      visibility,
+    );
     return new Posts(post);
   }
 
   @Get(':id/posts')
   @ApiOperation({
     summary: 'Lấy danh sách bài viết liên quan',
-    description: 'Lấy tất cả bài viết liên quan do cùng một tác giả tạo'
+    description: 'Lấy tất cả bài viết liên quan do cùng một tác giả tạo',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Danh sách bài viết liên quan' })
