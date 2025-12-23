@@ -63,45 +63,59 @@ enum XPAction {
   LIKE_RECEIVED
 }
 
+enum ImageType {
+  POST
+  COMMENT
+  USER
+}
+
+enum CommentCategory {
+  POSITIVE
+  NEGATIVE
+  NEUTRAL
+  TOXIC
+}
+
 //////////////////////////////////////////////////
 // USERS
 //////////////////////////////////////////////////
 
 model User {
-  id          Int      @id @default(autoincrement())
-  fullName    String
-  userName    String?  @unique
-  email       String   @unique
-  password    String?
-  role        Role     @default(USER)
-  avatarUrl   String?
-  bio         String?
-  birthday    DateTime?
-  gender      String?
-  level       Int      @default(1)
-  xp          Int      @default(0)
-  googleId    String?  @unique
-  facebookId  String?  @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         Int       @id @default(autoincrement())
+  fullName   String
+  userName   String?   @unique
+  email      String    @unique
+  password   String?
+  role       Role      @default(USER)
+  avatarUrl  String?
+  bio        String?
+  birthday   DateTime?
+  gender     String?
+  level      Int       @default(1)
+  xp         Int       @default(0)
+  googleId   String?   @unique
+  facebookId String?   @unique
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  posts       Post[]
-  comments    Comment[]
-  likes       PostLike[]
-  followsFrom UserFollow[] @relation("Follower")
-  followsTo   UserFollow[] @relation("Following")
-  xpLogs      XPLog[]
-  badges      UserBadge[]
+  posts         Post[]
+  comments      Comment[]
+  likes         PostLike[]
+  followsFrom   UserFollow[]   @relation("Follower")
+  followsTo     UserFollow[]   @relation("Following")
+  xpLogs        XPLog[]
+  badges        UserBadge[]
   notifications Notification[]
-  reports     Report[] @relation("Reporter")
+  reports       Report[]       @relation("Reporter")
 
-  tuviCharts UserTuViChart[]
+  tuviCharts   UserTuViChart[]
   commentVotes CommentVote[]
   collections  Collection[]
   bookmarks    Bookmark[]
   pollVotes    PollVote[]
   postViews    PostView[]
   faceLandmarks UserFaceLandmarks[]
+  images       Image[]
 }
 
 //////////////////////////////////////////////////
@@ -124,30 +138,31 @@ model UserFollow {
 //////////////////////////////////////////////////
 
 model Post {
-  id         Int           @id @default(autoincrement())
-  userId     Int
-  title      String?
-  content    String?
-  contentJson Json?
-  contentText String?
+  id            Int               @id @default(autoincrement())
+  userId        Int
+  title         String?
+  content       String?
+  contentJson   Json?
+  contentText   String?
   contentFormat PostContentFormat @default(TIPTAP_JSON)
-  type       PostType      @default(NORMAL)
-  visibility PostVisibility @default(PUBLIC)
-  status     PostStatus    @default(VISIBLE)
-  isDraft    Boolean       @default(false)
-  deletedAt  DateTime?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  type          PostType          @default(NORMAL)
+  visibility    PostVisibility    @default(PUBLIC)
+  status        PostStatus        @default(VISIBLE)
+  isDraft       Boolean           @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
-  user       User          @relation(fields: [userId], references: [id])
-  comments   Comment[]
-  likes      PostLike[]
-  tags       PostTag[]
-  edits      PostEditHistory[]
-  poll       Poll?
-  views      PostView[]
-  reports    Report[]
-  bookmarks    Bookmark[]
+  user      User              @relation(fields: [userId], references: [id])
+  comments  Comment[]
+  likes     PostLike[]
+  tags      PostTag[]
+  edits     PostEditHistory[]
+  poll      Poll?
+  views     PostView[]
+  reports   Report[]
+  bookmarks Bookmark[]
+  images    Image[]
 }
 
 //////////////////////////////////////////////////
@@ -155,12 +170,12 @@ model Post {
 //////////////////////////////////////////////////
 
 model PostEditHistory {
-  id        Int      @id @default(autoincrement())
-  postId    Int
+  id         Int      @id @default(autoincrement())
+  postId     Int
   oldContent String?
-  editedAt  DateTime @default(now())
+  editedAt   DateTime @default(now())
 
-  post      Post @relation(fields: [postId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
 }
 
 //////////////////////////////////////////////////
@@ -168,22 +183,23 @@ model PostEditHistory {
 //////////////////////////////////////////////////
 
 model Comment {
-  id        Int      @id @default(autoincrement())
-  postId    Int
-  userId    Int
-  content   String
-  parentId  Int?
-  imageUrl  String?
-  isAnonymous Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  id          Int              @id @default(autoincrement())
+  postId      Int
+  userId      Int
+  content     String
+  parentId    Int?
+  isAnonymous Boolean          @default(false)
+  category    CommentCategory? @default(NEUTRAL)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
 
-  post   Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies Comment[] @relation("CommentReplies")
-  votes  CommentVote[]
+  post    Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[]     @relation("CommentReplies")
+  votes   CommentVote[]
   reports Report[]
+  images  Image[]
 
   @@index([postId])
   @@index([userId])
@@ -199,8 +215,8 @@ model CommentVote {
   userId    Int
   type      VoteType
 
-  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([commentId, userId])
 }
@@ -214,8 +230,8 @@ model PostLike {
   userId    Int
   createdAt DateTime @default(now())
 
-  post      Post @relation(fields: [postId], references: [id])
-  user      User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@id([postId, userId])
 }
@@ -225,8 +241,8 @@ model PostLike {
 //////////////////////////////////////////////////
 
 model Tag {
-  id    Int    @id @default(autoincrement())
-  name  String @unique
+  id   Int    @id @default(autoincrement())
+  name String @unique
 
   posts PostTag[]
 }
@@ -235,8 +251,8 @@ model PostTag {
   postId Int
   tagId  Int
 
-  post   Post @relation(fields: [postId], references: [id])
-  tag    Tag  @relation(fields: [tagId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+  tag  Tag  @relation(fields: [tagId], references: [id])
 
   @@id([postId, tagId])
 }
@@ -251,7 +267,7 @@ model Collection {
   name      String
   createdAt DateTime @default(now())
 
-  user      User @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
   bookmarks Bookmark[]
 }
 
@@ -261,10 +277,10 @@ model Bookmark {
   collectionId Int?
   createdAt    DateTime @default(now())
 
-  user        User @relation(fields: [userId], references: [id])
-  post        Post @relation(fields: [postId], references: [id])
-  collection  Collection? @relation(fields: [collectionId], references: [id])
-  
+  user       User        @relation(fields: [userId], references: [id])
+  post       Post        @relation(fields: [postId], references: [id])
+  collection Collection? @relation(fields: [collectionId], references: [id])
+
   @@id([userId, postId])
 }
 
@@ -273,21 +289,21 @@ model Bookmark {
 //////////////////////////////////////////////////
 
 model Poll {
-  id        Int      @id @default(autoincrement())
-  postId    Int      @unique
+  id        Int       @id @default(autoincrement())
+  postId    Int       @unique
   expiresAt DateTime?
 
-  post      Post @relation(fields: [postId], references: [id])
-  options   PollOption[]
+  post    Post         @relation(fields: [postId], references: [id])
+  options PollOption[]
 }
 
 model PollOption {
-  id      Int    @id @default(autoincrement())
-  pollId  Int
-  text    String
+  id     Int    @id @default(autoincrement())
+  pollId Int
+  text   String
 
-  poll    Poll @relation(fields: [pollId], references: [id])
-  votes   PollVote[]
+  poll  Poll       @relation(fields: [pollId], references: [id])
+  votes PollVote[]
 }
 
 model PollVote {
@@ -295,8 +311,8 @@ model PollVote {
   userId       Int
   createdAt    DateTime @default(now())
 
-  option       PollOption @relation(fields: [pollOptionId], references: [id])
-  user         User       @relation(fields: [userId], references: [id])
+  option PollOption @relation(fields: [pollOptionId], references: [id])
+  user   User       @relation(fields: [userId], references: [id])
 
   @@id([pollOptionId, userId])
 }
@@ -312,15 +328,15 @@ model XPLog {
   value     Int
   createdAt DateTime @default(now())
 
-  user      User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model Badge {
-  id          Int    @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   name        String
   description String?
 
-  users       UserBadge[]
+  users UserBadge[]
 }
 
 model UserBadge {
@@ -328,8 +344,8 @@ model UserBadge {
   badgeId  Int
   earnedAt DateTime @default(now())
 
-  user     User  @relation(fields: [userId], references: [id])
-  badge    Badge @relation(fields: [badgeId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  badge Badge @relation(fields: [badgeId], references: [id])
 
   @@id([userId, badgeId])
 }
@@ -339,15 +355,15 @@ model UserBadge {
 //////////////////////////////////////////////////
 
 model Notification {
-  id        Int      @id @default(autoincrement())
+  id        Int              @id @default(autoincrement())
   userId    Int
   type      NotificationType
   refId     Int?
   content   String
-  isRead    Boolean @default(false)
-  createdAt DateTime @default(now())
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
 
-  user      User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 //////////////////////////////////////////////////
@@ -355,17 +371,17 @@ model Notification {
 //////////////////////////////////////////////////
 
 model Report {
-  id         Int      @id @default(autoincrement())
+  id         Int          @id @default(autoincrement())
   reporterId Int
   postId     Int?
   commentId  Int?
   reason     String
   status     ReportStatus @default(PENDING)
-  createdAt  DateTime @default(now())
+  createdAt  DateTime     @default(now())
 
-  reporter   User    @relation("Reporter", fields: [reporterId], references: [id])
-  post       Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reporter User     @relation("Reporter", fields: [reporterId], references: [id])
+  post     Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment  Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
 }
 
 //////////////////////////////////////////////////
@@ -377,36 +393,64 @@ model PostView {
   userId   Int?
   viewedAt DateTime @default(now())
 
-  post     Post @relation(fields: [postId], references: [id])
-  user     User? @relation(fields: [userId], references: [id])
+  post Post  @relation(fields: [postId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
 
   @@id([postId, viewedAt])
 }
 
+//////////////////////////////////////////////////
+// IMAGE
+//////////////////////////////////////////////////
+
+model Image {
+  id        Int       @id @default(autoincrement())
+  url       String
+  type      ImageType
+  entityId  Int
+  postId    Int?
+  commentId Int?
+  userId    Int?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type, entityId])
+  @@index([postId])
+  @@index([commentId])
+  @@index([userId])
+}
+
+//////////////////////////////////////////////////
+// TU VI CHART
+//////////////////////////////////////////////////
+
 enum TuViChartStatus {
-  GENERATED   
-  AI_INTERPRETED 
-  EXPERT_INTERPRETED 
+  GENERATED
+  AI_INTERPRETED
+  EXPERT_INTERPRETED
   DELETED
 }
 
 model UserTuViChart {
-  id               Int                @id @default(autoincrement())           
+  id               Int             @id @default(autoincrement())
   userId           Int
-  birthDate        DateTime           
-  birthHour        Float              
-  gender           String             
-  birthPlace       String?            
-  isLunar          Boolean            
-  can              String             
-  chi              String             
-  menhElement      String             
-  chartData        Json               
-  interpretationAI String?            
-  status           TuViChartStatus    
-  createdAt        DateTime           
-  updatedAt        DateTime           
-
+  birthDate        DateTime
+  birthHour        Float
+  gender           String
+  birthPlace       String?
+  isLunar          Boolean
+  can              String
+  chi              String
+  menhElement      String
+  chartData        Json
+  interpretationAI String?
+  status           TuViChartStatus
+  createdAt        DateTime
+  updatedAt        DateTime
   user             User               @relation(fields: [userId], references: [id])
 }
 

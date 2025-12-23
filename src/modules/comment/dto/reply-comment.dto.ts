@@ -19,13 +19,4 @@ export class ReplyCommentDto {
   @IsOptional()
   @IsBoolean()
   isAnonymous?: boolean;
-
-  @IsOptional()
-  @IsString()
-  @ApiProperty({
-    description: 'Đính kèm thêm ảnh hoặc chỉnh sửa ảnh cũ',
-    example: 'https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg',
-    type: String,
-  })
-  imageUrl?: string;
 }

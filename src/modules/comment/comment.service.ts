@@ -1,21 +1,28 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ReplyCommentDto } from './dto/reply-comment.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { VoteType } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
-import { v2 as cloudinary} from 'cloudinary';
+import { v2 as cloudinary } from 'cloudinary';
+import * as fs from 'fs';
+import { File as MulterFile } from 'multer';
 
 @Injectable()
 export class CommentService {
   constructor(
     private prisma: PrismaService,
     private notificationGateway: NotificationGateway,
-  ) { }
+  ) {}
 
   async update(commentId: number, userId: number, dto: UpdateCommentDto) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
+      include: { images: true },
     });
     if (!comment) throw new NotFoundException();
     if (comment.userId !== userId) throw new ForbiddenException();
@@ -24,7 +31,6 @@ export class CommentService {
       where: { id: commentId },
       data: {
         content: dto.content,
-        imageUrl: dto.imageUrl,
       },
       include: {
         user: {
@@ -35,6 +41,12 @@ export class CommentService {
           },
         },
         votes: true,
+        images: {
+          select: {
+            id: true,
+            url: true,
+          },
+        },
       },
     });
 
@@ -46,6 +58,7 @@ export class CommentService {
 
     const commentWithMeta = {
       ...updatedComment,
+      images: updatedComment.images.map((img) => img.url),
       isOwner: false, // FE tự xác định
       displayName: updatedComment.isAnonymous
         ? 'Ẩn danh'
@@ -100,6 +113,7 @@ export class CommentService {
     commentId: number,
     userId: number,
     dto: ReplyCommentDto,
+    files?: MulterFile[],
   ) {
     const parent = await this.prisma.comment.findUnique({
       where: { id: commentId },
@@ -111,6 +125,29 @@ export class CommentService {
       throw new ForbiddenException(
         'Chỉ có thể reply comment gốc, không thể reply của reply',
       );
+    }
+
+    // Upload tất cả ảnh lên Cloudinary
+    const imageUrls: string[] = [];
+    if (files && files.length > 0) {
+      for (const file of files) {
+        // Nếu file đã được Cloudinary middleware xử lý
+        if ((file as any).secure_url) {
+          imageUrls.push((file as any).secure_url);
+        } else {
+          // Upload thủ công nếu chưa
+          const result = await cloudinary.uploader.upload(file.path, {
+            folder: 'comments',
+            resource_type: 'auto',
+          });
+          imageUrls.push(result.secure_url);
+
+          // Xóa file tạm nếu tồn tại
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        }
+      }
     }
 
     const replyComment = await this.prisma.comment.create({
@@ -127,6 +164,44 @@ export class CommentService {
             id: true,
             fullName: true,
             avatarUrl: true,
+          },
+        },
+        images: {
+          select: {
+            id: true,
+            url: true,
+          },
+        },
+      },
+    });
+
+    // Lưu images vào bảng Image
+    if (imageUrls.length > 0) {
+      await this.prisma.image.createMany({
+        data: imageUrls.map((url) => ({
+          url,
+          type: 'COMMENT',
+          entityId: replyComment.id,
+          commentId: replyComment.id,
+        })),
+      });
+    }
+
+    // Fetch lại comment với images
+    const replyWithImages = await this.prisma.comment.findUnique({
+      where: { id: replyComment.id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+        images: {
+          select: {
+            id: true,
+            url: true,
           },
         },
       },
@@ -149,12 +224,17 @@ export class CommentService {
     }
 
     // Broadcast real-time reply to all users viewing this post
+    if (!replyWithImages) {
+      throw new NotFoundException('Reply comment not found after creation');
+    }
+
     const replyWithMeta = {
-      ...replyComment,
+      ...replyWithImages,
+      images: replyWithImages.images.map((img) => img.url),
       isOwner: false, // FE xử lý
-      displayName: replyComment.isAnonymous
+      displayName: replyWithImages.isAnonymous
         ? 'Ẩn danh'
-        : replyComment.user?.fullName || 'Unknown',
+        : replyWithImages.user?.fullName || 'Unknown',
       voteCounts: {
         upvotes: 0,
         downvotes: 0,
@@ -163,15 +243,11 @@ export class CommentService {
     };
     this.notificationGateway.emitNewComment(parent.postId, replyWithMeta);
 
-    return replyComment;
+    return replyWithImages;
   }
 
   // vote type: upvote / downvote
-  async vote(
-    commentId: number,
-    userId: number,
-    type: VoteType,
-  ) {
+  async vote(commentId: number, userId: number, type: VoteType) {
     // đảm bảo comment tồn tại
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
