@@ -145,4 +145,17 @@ export class UserService {
     const publicId = publicIdWithExtension; 
     await cloudinary.uploader.destroy(publicId);
   }
+
+  // xoá ảnh đại diện cũ trên Cloudinary (chỉ nếu URL từ Cloudinary)
+  async deleteAvatarIfCloudinary(avatarUrl: string) {
+    // Chỉ xóa nếu URL từ Cloudinary (chứa 'cloudinary.com' hoặc 'res.cloudinary.com')
+    if (avatarUrl && (avatarUrl.includes('cloudinary.com') || avatarUrl.includes('res.cloudinary.com'))) {
+      try {
+        await this.deleteAvatar(avatarUrl);
+      } catch (error) {
+        // Bỏ qua lỗi nếu không thể xóa (có thể ảnh đã bị xóa hoặc không tồn tại)
+        console.warn('Không thể xóa avatar cũ trên Cloudinary:', error);
+      }
+    }
+  }
 }
