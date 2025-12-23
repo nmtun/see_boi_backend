@@ -14,7 +14,6 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { ReportModule } from './modules/report/report.module';
 import { TuViModule } from './modules/tuvi/tuvi.module';
 import { GoogleGeminiModule } from './modules/gemini/google-gemini.module';
-import { NotificationGateway } from './utils/notification.gateway';
 import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
@@ -25,6 +24,6 @@ import { UploadModule } from './modules/upload/upload.module';
     UploadModule
   ],
   controllers: [], 
-  providers: [NotificationGateway],  
+  providers: [], // Đã xóa NotificationGateway khỏi đây, chỉ khai báo trong NotificationModule
 })
 export class AppModule {}

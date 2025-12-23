@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, UseInterceptors, Logger } from '@nestjs/common';
 
 import { PostService } from './post.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -7,6 +7,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { Posts } from './entities/post.entity';
 import { RolesGuard } from '../../auth/guard/roles.guard';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
+import { OptionalJwtAuthGuard } from '../../auth/guard/optional-jwt.guard';
 import { PostVisibility } from '@prisma/client';
 import { PollService } from '../poll/poll.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
@@ -19,6 +20,8 @@ import { UploadedFile } from '@nestjs/common';
 @ApiBearerAuth()
 @Controller('post')
 export class PostController {
+  private readonly logger = new Logger(PostController.name);
+
   constructor(
     private readonly postService: PostService,
     private readonly pollService: PollService, // Inject PollService
@@ -86,16 +89,24 @@ export class PostController {
     );
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
   @ApiOperation({
     summary: 'Lấy chi tiết bài viết',
-    description: 'Lấy thông tin chi tiết của một bài viết theo ID'
+    description: 'Lấy thông tin chi tiết của một bài viết theo ID. Có thể truy cập không cần đăng nhập, nhưng nếu có token sẽ log view.'
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Thông tin bài viết' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy bài viết' })
   async findOne(@Param('id') id: string, @Req() req) {
-    const post = await this.postService.findById(+id, req.user.id);
+    // viewerId là optional - chỉ truyền nếu có user đăng nhập
+    const viewerId = req.user?.id;
+    
+    // Log username của người xem post
+    const username = req.user?.userName || 'Ẩn danh';
+    this.logger.log(`Người dùng "${username}" đã yêu cầu xem post ID: ${id}`);
+    
+    const post = await this.postService.findById(+id, viewerId);
 
     // Nếu có poll, trả về luôn kết quả poll
     let pollResult: any = null;
