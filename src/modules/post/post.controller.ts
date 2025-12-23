@@ -55,7 +55,6 @@ export class PostController {
     return new Posts(post);
   }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get()
   @ApiOperation({
     summary: 'Lấy danh sách tất cả bài viết',
@@ -86,7 +85,6 @@ export class PostController {
     );
   }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id')
   @ApiOperation({
     summary: 'Lấy chi tiết bài viết',
@@ -191,7 +189,6 @@ export class PostController {
     return this.postService.unlike(+id, req.user.id);
   }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get('trending')
   @ApiOperation({
     summary: 'Lấy bài viết trending',
@@ -256,7 +253,6 @@ export class PostController {
     return comment;
   }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id/comments')
   @ApiOperation({
     summary: 'Lấy danh sách bình luận',
@@ -365,7 +361,6 @@ export class PostController {
     return new Posts(post);
   }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id/posts')
   @ApiOperation({
     summary: 'Lấy danh sách bài viết liên quan',
@@ -376,33 +371,5 @@ export class PostController {
   async getPostsByUser(@Param('id') id: string) {
     const posts = await this.postService.getPostsByUser(+id);
     return posts;
-  }
-
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Post('upload-image')
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file', { storage }))
-  @ApiOperation({
-    summary: 'Upload ảnh lên Cloudinary',
-    description: 'Upload ảnh lên Cloudinary và trả về URL ảnh'
-  })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-          description: 'File ảnh để upload'
-        }
-      }
-    }
-  })
-  @ApiResponse({ status: 201, description: 'Upload thành công' })
-  async uploadImage(@UploadedFile() file?: MulterFile) {
-    if (file && (file as any).secure_url) {
-      return { imageUrl: (file as any).secure_url };
-    }
-    throw new Error('Upload failed');
   }
 }

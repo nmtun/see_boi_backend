@@ -4,6 +4,7 @@ import { ReplyCommentDto } from './dto/reply-comment.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { VoteType } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
+import { v2 as cloudinary} from 'cloudinary';
 
 @Injectable()
 export class CommentService {
@@ -23,8 +24,24 @@ export class CommentService {
       where: { id: commentId },
       data: {
         content: dto.content,
+        imageUrl: dto.imageUrl,
       },
     });
+  }
+
+  async getCommentById(commentId: number) {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException();
+    return comment;
+  }
+
+  async deleteCommentImage(imageUrl: string) {
+    const parts = imageUrl.split('/');
+    const publicIdWithExtension = parts.slice(7).join('/').split('.')[0];
+    const publicId = publicIdWithExtension;
+    await cloudinary.uploader.destroy(publicId);
   }
 
   async remove(commentId: number, userId: number) {

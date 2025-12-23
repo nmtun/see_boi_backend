@@ -18,16 +18,46 @@ export class CommentController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch(':id')
   @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { storage }))
   @ApiOperation({ 
     summary: 'Cập nhật bình luận',
-    description: 'Chỉnh sửa nội dung bình luận. Chỉ tác giả mới có thể chỉnh sửa.' 
+    description: 'Chỉnh sửa nội dung bình luận, có thể cập nhật ảnh mới. Nếu có ảnh mới thì xóa ảnh cũ.' 
   })
   @ApiParam({ name: 'id', description: 'ID của bình luận', type: Number })
-  @ApiBody({ type: UpdateCommentDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'Nội dung bình luận mới' },
+        file: { type: 'string', format: 'binary', description: 'Ảnh mới (tùy chọn)' }
+      }
+    }
+  })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
   @ApiResponse({ status: 403, description: 'Không có quyền chỉnh sửa' })
-  async update(@Param('id') id: string, @Body() dto: UpdateCommentDto, @Req() req) {
-    return this.commentService.update(+id, req.user.id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Req() req,
+    @UploadedFile() file?: MulterFile
+  ) {
+    let imageUrl = body.imageUrl;
+    // Lấy comment hiện tại
+    const comment = await this.commentService.getCommentById(+id);
+
+    // Nếu upload file mới
+    if (file && (file as any).secure_url) {
+      // Nếu có ảnh cũ thì xóa
+      if (comment.imageUrl) {
+        await this.commentService.deleteCommentImage(comment.imageUrl);
+      }
+      imageUrl = (file as any).secure_url;
+    }
+
+    return this.commentService.update(+id, req.user.id, {
+      content: body.content,
+      imageUrl,
+    });
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -109,5 +139,50 @@ export class CommentController {
   @ApiResponse({ status: 200, description: 'Xóa phiếu bàu thành công' })
   async removeVote(@Param('id') id: string, @Req() req) {
     return this.commentService.removeVote(+id, req.user.id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Patch('reply/:id')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { storage }))
+  @ApiOperation({ 
+    summary: 'Chỉnh sửa reply',
+    description: 'Chỉnh sửa nội dung reply, có thể cập nhật ảnh mới. Nếu có ảnh mới thì xóa ảnh cũ.' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của reply', type: Number })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'Nội dung reply mới' },
+        file: { type: 'string', format: 'binary', description: 'Ảnh mới (tùy chọn)' }
+      }
+    }
+  })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền chỉnh sửa' })
+  async updateReply(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Req() req,
+    @UploadedFile() file?: MulterFile
+  ) {
+    let imageUrl = body.imageUrl;
+    // Lấy reply hiện tại
+    const reply = await this.commentService.getCommentById(+id);
+
+    // Nếu upload file mới
+    if (file && (file as any).secure_url) {
+      // Nếu có ảnh cũ thì xóa
+      if (reply.imageUrl) {
+        await this.commentService.deleteCommentImage(reply.imageUrl);
+      }
+      imageUrl = (file as any).secure_url;
+    }
+
+    return this.commentService.update(+id, req.user.id, {
+      content: body.content,
+      imageUrl,
+    });
   }
 }

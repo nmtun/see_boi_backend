@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationGateway } from 'src/utils/notification.gateway';
-
+import { v2 as cloudinary} from 'cloudinary';
 @Injectable()
 export class UserService {
   constructor(private prisma: PrismaService, private notificationGateway: NotificationGateway) { }
@@ -138,4 +138,11 @@ export class UserService {
     });
   }
 
+  // xoá ảnh đại diện cũ trên Cloudinary
+  async deleteAvatar(avatarUrl: string) {
+    const parts = avatarUrl.split('/');
+    const publicIdWithExtension = parts.slice(7).join('/').split('.')[0]; 
+    const publicId = publicIdWithExtension; 
+    await cloudinary.uploader.destroy(publicId);
+  }
 }
