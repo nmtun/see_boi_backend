@@ -101,6 +101,7 @@ model User {
   bookmarks    Bookmark[]
   pollVotes    PollVote[]
   postViews    PostView[]
+  faceLandmarks UserFaceLandmarks[]
 }
 
 //////////////////////////////////////////////////
@@ -407,4 +408,17 @@ model UserTuViChart {
   updatedAt        DateTime           
 
   user             User               @relation(fields: [userId], references: [id])
+}
+
+model UserFaceLandmarks {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  metrics   Json
+  report    Json
+  landmarks Json
+  tags      String[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([tags])
 }
