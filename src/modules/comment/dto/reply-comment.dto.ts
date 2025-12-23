@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsBoolean, IsOptional } from 'class-validator';
 
 export class ReplyCommentDto {
   @ApiProperty({
@@ -11,6 +11,12 @@ export class ReplyCommentDto {
   @IsString()
   content: string;
 
-  @ApiPropertyOptional({ description: 'URL ảnh (nếu có)' })
-  imageUrl?: string;
+  @ApiPropertyOptional({
+    description: 'Ẩn danh hay không',
+    example: false,
+    type: Boolean,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isAnonymous?: boolean;
 }

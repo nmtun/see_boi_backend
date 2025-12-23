@@ -20,13 +20,45 @@ export class CommentService {
     if (!comment) throw new NotFoundException();
     if (comment.userId !== userId) throw new ForbiddenException();
 
-    return this.prisma.comment.update({
+    const updatedComment = await this.prisma.comment.update({
       where: { id: commentId },
       data: {
         content: dto.content,
         imageUrl: dto.imageUrl,
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+        votes: true,
+      },
     });
+
+    // ✅ Broadcast real-time update to all users viewing this post
+    const upvotes = updatedComment.votes.filter((v) => v.type === 'UP').length;
+    const downvotes = updatedComment.votes.filter(
+      (v) => v.type === 'DOWN',
+    ).length;
+
+    const commentWithMeta = {
+      ...updatedComment,
+      isOwner: false, // FE tự xác định
+      displayName: updatedComment.isAnonymous
+        ? 'Ẩn danh'
+        : updatedComment.user?.fullName || 'Unknown',
+      voteCounts: {
+        upvotes,
+        downvotes,
+        total: upvotes - downvotes,
+      },
+    };
+    this.notificationGateway.emitUpdateComment(comment.postId, commentWithMeta);
+
+    return updatedComment;
   }
 
   async getCommentById(commentId: number) {
@@ -51,10 +83,17 @@ export class CommentService {
     if (!comment) throw new NotFoundException();
     if (comment.userId !== userId) throw new ForbiddenException();
 
+    const postId = comment.postId;
+
     // Xóa cascade reply + vote
-    return this.prisma.comment.delete({
+    await this.prisma.comment.delete({
       where: { id: commentId },
     });
+
+    // Broadcast real-time delete to all users viewing this post
+    this.notificationGateway.emitDeleteComment(postId, commentId);
+
+    return comment;
   }
 
   async reply(
@@ -67,13 +106,29 @@ export class CommentService {
     });
     if (!parent) throw new NotFoundException('Parent comment not found');
 
+    // Validate: Chỉ cho phép reply comment gốc (parentId === null)
+    if (parent.parentId !== null) {
+      throw new ForbiddenException(
+        'Chỉ có thể reply comment gốc, không thể reply của reply',
+      );
+    }
+
     const replyComment = await this.prisma.comment.create({
       data: {
         postId: parent.postId,
         userId,
         parentId: commentId,
         content: dto.content,
-        imageUrl: dto.imageUrl,
+        isAnonymous: dto.isAnonymous ?? false,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
       },
     });
 
@@ -92,6 +147,21 @@ export class CommentService {
       // Gửi socket realtime
       this.notificationGateway.sendComment(parent.userId, notification);
     }
+
+    // Broadcast real-time reply to all users viewing this post
+    const replyWithMeta = {
+      ...replyComment,
+      isOwner: false, // FE xử lý
+      displayName: replyComment.isAnonymous
+        ? 'Ẩn danh'
+        : replyComment.user?.fullName || 'Unknown',
+      voteCounts: {
+        upvotes: 0,
+        downvotes: 0,
+        total: 0,
+      },
+    };
+    this.notificationGateway.emitNewComment(parent.postId, replyWithMeta);
 
     return replyComment;
   }
