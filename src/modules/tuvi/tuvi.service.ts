@@ -65,6 +65,126 @@ export class TuViService {
 
   private readonly logger = new Logger(TuViService.name);
 
+  // ============================================
+  // TÍNH TOÁN LÁ SỐ (KHÔNG LƯU VÀO DB)
+  // ============================================
+  async calculateTuViChart(dto: CreateTuViChartDto): Promise<TuViChart> {
+    try {
+      const isLunarInput = dto.isLunar ?? false;
+      const { day, month, year, canYear, chiYear, solarDate } = this.getLunarDate(dto.birthDate, isLunarInput);
+      const menhElement: NguHanhElement = 'Thủy';
+      const hourIdx = this.hourToBranchIndex(dto.birthHour);
+      const menhIdx = this.calcMenhIndex(month, hourIdx);
+      const cuc = this.getCuc(canYear, menhIdx);
+      const tuViPos = this.getTuViPosition(cuc, day);
+
+      const houses: House[] = DIA_CHI_ARRAY.map(branch => ({
+        cung_name: 'Mệnh',
+        branch,
+        major_stars: [],
+        minor_stars: [],
+        analysis: '',
+      }));
+
+      CUNG_NAMES_ARRAY.forEach((name, i) => {
+        let pos = (menhIdx - i);
+        while (pos < 0) pos += 12;
+        houses[pos % 12].cung_name = name;
+      });
+
+      const tuViGroup = [
+        { star: MAJOR_STARS.TU_VI, offset: 0 }, { star: MAJOR_STARS.THIEN_CO, offset: 1 },
+        { star: MAJOR_STARS.THAI_DUONG, offset: 3 }, { star: MAJOR_STARS.VU_KHUC, offset: 4 },
+        { star: MAJOR_STARS.THIEN_DONG, offset: 5 }, { star: MAJOR_STARS.LIEM_TRINH, offset: 8 },
+      ];
+      tuViGroup.forEach(s => {
+        let pos = tuViPos - s.offset;
+        while (pos < 0) pos += 12;
+        houses[pos % 12].major_stars.push(s.star);
+      });
+
+      const thienPhuPos = (16 - tuViPos) % 12;
+      const thienPhuGroup = [
+        { star: MAJOR_STARS.THIEN_PHU, offset: 0 }, { star: MAJOR_STARS.THAI_AM, offset: 1 },
+        { star: MAJOR_STARS.THAM_LANG, offset: 2 }, { star: MAJOR_STARS.CU_MON, offset: 3 },
+        { star: MAJOR_STARS.THIEN_TUONG, offset: 4 }, { star: MAJOR_STARS.THIEN_LUONG, offset: 5 },
+        { star: MAJOR_STARS.THAT_SAT, offset: 6 }, { star: MAJOR_STARS.PHA_QUAN, offset: 10 },
+      ];
+      thienPhuGroup.forEach(s => {
+        const pos = (thienPhuPos + s.offset) % 12;
+        houses[pos % 12].major_stars.push(s.star);
+      });
+
+      houses.forEach(h => {
+        const starStr = h.major_stars.length ? h.major_stars.join(', ') : 'Vô chính diệu';
+        h.analysis = `${h.cung_name} có ${starStr}`;
+      });
+
+      const aspects: AspectScores = this.calculateAspects(houses);
+
+      const chart: TuViChart = {
+        input: {
+          birthDate: dto.birthDate,
+          birthHour: dto.birthHour,
+          gender: dto.gender,
+          birthPlace: dto.birthPlace,
+          isLunar: isLunarInput,
+          can: canYear,
+          chi: chiYear,
+          menh: menhElement
+        },
+        houses,
+        aspects,
+        interpretationAI: null
+      };
+
+      return chart;
+    } catch (error) {
+      this.logger.error(`Error calculating chart: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Lỗi tính toán tử vi');
+    }
+  }
+
+  // ============================================
+  // TẠO VÀ LƯU LÁ SỐ VÀO DB
+  // ============================================
+  async generateTuViChart(userId: number, dto: CreateTuViChartDto): Promise<TuViChartResponse> {
+    try {
+      // Tính toán lá số
+      const chart = await this.calculateTuViChart(dto);
+
+      // Lưu vào database
+      const isLunarInput = dto.isLunar ?? false;
+      const { solarDate } = this.getLunarDate(dto.birthDate, isLunarInput);
+      
+      const newRecord = await this.prisma.userTuViChart.create({
+        data: {
+          userId,
+          birthDate: solarDate,
+          birthHour: dto.birthHour,
+          gender: dto.gender as 'nam' | 'nữ',
+          birthPlace: dto.birthPlace,
+          isLunar: isLunarInput,
+          can: chart.input.can,
+          chi: chart.input.chi,
+          menhElement: chart.input.menh,
+          chartData: chart as unknown as Prisma.InputJsonValue,
+          status: 'GENERATED',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+      });
+
+      const responsedChart: TuViChartResponse = {
+        chartId: newRecord.id,
+        output: chart
+      };
+      return responsedChart;
+    } catch (error) {
+      this.logger.error(`Error: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Lỗi tính toán tử vi');
+    }
+  }
 
   private getLunarDate(dateStr: string, isLunarInput: boolean) {
     const d = new Date(dateStr);
@@ -188,117 +308,44 @@ export class TuViService {
     return normalized;
   }
 
-
-  async generateTuViChart(userId: number, dto: CreateTuViChartDto): Promise<TuViChartResponse> {
-    try {
-      const isLunarInput = dto.isLunar ?? false;
-
-      const { day, month, canYear, chiYear, solarDate } = this.getLunarDate(dto.birthDate, isLunarInput);
-      const menhElement = NAP_AM_MAP[`${canYear}${chiYear}`] || 'Kim';
-
-      const hourIdx = this.hourToBranchIndex(dto.birthHour);
-      const menhIdx = this.calcMenhIndex(month, hourIdx);
-      const cuc = this.getCuc(canYear, menhIdx);
-      const tuViPos = this.getTuViPosition(cuc, day);
-
-      const houses: House[] = DIA_CHI_ARRAY.map(branch => ({
-        cung_name: 'Mệnh',
-        branch,
-        major_stars: [],
-        minor_stars: [],
-        analysis: '',
-      }));
-
-      CUNG_NAMES_ARRAY.forEach((name, i) => {
-        let pos = (menhIdx - i);
-        while (pos < 0) pos += 12;
-        houses[pos % 12].cung_name = name;
-      });
-
-      const tuViGroup = [
-        { star: MAJOR_STARS.TU_VI, offset: 0 }, { star: MAJOR_STARS.THIEN_CO, offset: 1 },
-        { star: MAJOR_STARS.THAI_DUONG, offset: 3 }, { star: MAJOR_STARS.VU_KHUC, offset: 4 },
-        { star: MAJOR_STARS.THIEN_DONG, offset: 5 }, { star: MAJOR_STARS.LIEM_TRINH, offset: 8 },
-      ];
-      tuViGroup.forEach(s => {
-        let pos = tuViPos - s.offset;
-        while (pos < 0) pos += 12;
-        houses[pos % 12].major_stars.push(s.star);
-      });
-
-      const thienPhuPos = (16 - tuViPos) % 12;
-      const thienPhuGroup = [
-        { star: MAJOR_STARS.THIEN_PHU, offset: 0 }, { star: MAJOR_STARS.THAI_AM, offset: 1 },
-        { star: MAJOR_STARS.THAM_LANG, offset: 2 }, { star: MAJOR_STARS.CU_MON, offset: 3 },
-        { star: MAJOR_STARS.THIEN_TUONG, offset: 4 }, { star: MAJOR_STARS.THIEN_LUONG, offset: 5 },
-        { star: MAJOR_STARS.THAT_SAT, offset: 6 }, { star: MAJOR_STARS.PHA_QUAN, offset: 10 },
-      ];
-      thienPhuGroup.forEach(s => {
-        const pos = (thienPhuPos + s.offset) % 12;
-        houses[pos % 12].major_stars.push(s.star);
-      });
-
-      houses.forEach(h => {
-        const starStr = h.major_stars.length ? h.major_stars.join(', ') : 'Vô chính diệu';
-        h.analysis = `${h.cung_name} có ${starStr}`;
-      });
-
-      const aspects: AspectScores = this.calculateAspects(houses);
-
-      const chart: TuViChart = {
-        input: {
-          birthDate: dto.birthDate,
-          birthHour: dto.birthHour,
-          gender: dto.gender,
-          birthPlace: dto.birthPlace,
-          isLunar: isLunarInput,
-          can: canYear,
-          chi: chiYear,
-          menh: menhElement
-        },
-        houses,
-        aspects,
-        interpretationAI: null
-      };
-
-      const newRecord = await this.prisma.userTuViChart.create({
-        data: {
-          userId,
-          birthDate: solarDate,
-          birthHour: dto.birthHour,
-          gender: dto.gender as 'nam' | 'nữ',
-          birthPlace: dto.birthPlace,
-          isLunar: isLunarInput,
-          can: canYear,
-          chi: chiYear,
-          menhElement,
-          chartData: chart as unknown as Prisma.InputJsonValue,
-          status: 'GENERATED',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-      });
-      const responsedChart:TuViChartResponse={
-        chartId : newRecord.id,
-        output: chart
-      } 
-      return responsedChart;
-
-    } catch (error) {
-      this.logger.error(`Error: ${error.message}`, error.stack);
-      throw new InternalServerErrorException('Lỗi tính toán tử vi');
-    }
-  }
-
   async getTuViChartById(chartId: string | number, requestingUserId: number): Promise<TuViChart> {
     const id = Number(chartId);
     if (isNaN(id)) throw new BadRequestException('ID không hợp lệ');
 
     const record = await this.prisma.userTuViChart.findUnique({ where: { id } });
     if (!record) throw new NotFoundException('Không tìm thấy');
-    if (record.userId !== requestingUserId) throw new ForbiddenException('Không có quyền');
+    if (Number(record.userId) !== Number(requestingUserId)) throw new ForbiddenException('Không có quyền');
 
     return (typeof record.chartData === 'string' ? JSON.parse(record.chartData) : record.chartData) as TuViChart;
+  }
+
+  async getUserCharts(userId: number): Promise<any[]> {
+    const records = await this.prisma.userTuViChart.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        birthDate: true,
+        birthHour: true,
+        gender: true,
+        isLunar: true,
+        createdAt: true,
+        chartData: true,
+      },
+    });
+
+    return records.map(record => ({
+      chartId: record.id,
+      birthDate: record.birthDate,
+      birthHour: record.birthHour,
+      gender: record.gender,
+      isLunar: record.isLunar,
+      createdAt: record.createdAt,
+      // Trích xuất can chi từ chartData nếu cần
+      canChi: record.chartData ? 
+        `${(record.chartData as any).input?.can || ''} ${(record.chartData as any).input?.chi || ''}`.trim() : 
+        null,
+    }));
   }
 
   async requestAIInterpretation(userId: number, chartId: number): Promise<any> {
@@ -306,11 +353,20 @@ export class TuViService {
     if (!record || record.userId !== userId) throw new ForbiddenException('Lỗi quyền truy cập');
 
     const chart = (typeof record.chartData === 'string' ? JSON.parse(record.chartData) : record.chartData) as TuViChart;
+    
+    // ✅ Cache: Nếu đã có interpretationAI thì trả về luôn, không gọi AI
+    if (chart.interpretationAI) {
+      console.log(`[AI Cache] Returning cached interpretation for chartId: ${chartId}`);
+      return { "aiResponse": chart.interpretationAI, "cached": true };
+    }
+
+    // Nếu chưa có, gọi AI mới
     const summary = chart.houses.map(h =>
       `- ${h.cung_name} (${h.branch}): ${h.major_stars.join(', ') || 'Vô chính diệu'}`
     ).join('\n');
 
     const prompt = `Luận giải tử vi ngắn gọn:\n${summary}`;
+    console.log(`[AI Call] Generating new interpretation for chartId: ${chartId}`);
     const aiResp = await this.googleGeminiService.generateText(prompt);
 
     chart.interpretationAI = aiResp;
@@ -318,6 +374,6 @@ export class TuViService {
       where: { id: chartId },
       data: { chartData: chart as unknown as Prisma.InputJsonValue, updatedAt: new Date() }
     });
-    return { "aiResponse": aiResp };
+    return { "aiResponse": aiResp, "cached": false };
   }
 }
