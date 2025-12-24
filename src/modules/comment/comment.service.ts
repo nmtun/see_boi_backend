@@ -9,7 +9,6 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { VoteType } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
-import { File as MulterFile } from 'multer';
 
 @Injectable()
 export class CommentService {

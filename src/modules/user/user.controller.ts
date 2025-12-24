@@ -27,7 +27,6 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { avatarStorage } from '../../utils/cloudinary.storage';
-import { File as MulterFile } from 'multer';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -102,7 +101,7 @@ export class UserController {
   async updateMe(
     @Req() req,
     @Body() dto: UpdateUserDto,
-    @UploadedFile() file?: MulterFile,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     let data: any = { ...dto };
 

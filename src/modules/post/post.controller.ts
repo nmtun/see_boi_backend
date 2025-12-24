@@ -36,7 +36,6 @@ import {
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { postStorage, commentStorage } from '../../utils/cloudinary.storage';
-import { File as MulterFile } from 'multer';
 import { UploadedFile } from '@nestjs/common';
 
 @ApiTags('Posts')
@@ -67,7 +66,7 @@ export class PostController {
   @ApiResponse({ status: 401, description: 'Chưa đăng nhập' })
   async create(
     @Body() body: any,
-    @UploadedFiles() files: Array<MulterFile>,
+    @UploadedFiles() files: Array<Express.Multer.File>,
     @Req() req,
   ) {
     const dto: CreatePostDto = {
@@ -336,7 +335,7 @@ export class PostController {
     @Param('id') id: string,
     @Req() req,
     @Body() body: any,
-    @UploadedFiles() files?: MulterFile[],
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     const content = body.content;
     const parentId = body.parentId ? +body.parentId : undefined;

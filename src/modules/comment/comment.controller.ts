@@ -27,7 +27,6 @@ import {
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { commentStorage } from 'src/utils/cloudinary.storage';
-import { File as MulterFile } from 'multer';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
