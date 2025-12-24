@@ -17,20 +17,64 @@ import { RolesGuard } from '../../auth/guard/roles.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('Tu Vi Charts')
-@ApiBearerAuth()
 @Controller('tuvi')
 export class TuViController {
   constructor(private readonly tuviService: TuViService) {}
 
+  // ============================================
+  // TÍNH TOÁN LÁ SỐ (KHÔNG LƯU, CẦN AUTH)
+  // ============================================
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Post('create-chart')
+  @ApiBearerAuth()
+  @Post('calculate')
   @ApiOperation({
-    summary: 'Tạo lá số Tử Vi mới',
-    description: 'Người dùng đã đăng nhập có thể tạo một lá số Tử Vi bằng cách cung cấp thông tin ngày, giờ sinh và giới tính.',
+    summary: 'Tính toán lá số Tử Vi (không lưu vào database)',
+    description: 'Yêu cầu đăng nhập. Tính toán lá số Tử Vi mà không lưu vào DB. Kết quả chỉ trả về tạm thời.',
   })
   @ApiBody({ type: CreateTuViChartDto })
-  @ApiResponse({ status: 201, description: 'Lá số Tử Vi được tạo thành công.' }) 
-  @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ (Invalid birthDate, Invalid gender, etc.).' })
+  @ApiResponse({ status: 201, description: 'Lá số được tính toán thành công (không lưu vào DB).' })
+  @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ.' })
+  @ApiResponse({ status: 401, description: 'Không được ủy quyền. Yêu cầu JWT token hợp lệ.' })
+  async calculateTuViChart(
+    @Body() createTuViChartDto: CreateTuViChartDto,
+    @Req() req,
+  ): Promise<TuViChart> {
+    // User đã đăng nhập, có thể log userId nếu cần
+    const userId = req.user?.id;
+    console.log(`User ${userId} is calculating a chart`);
+    return this.tuviService.calculateTuViChart(createTuViChartDto);
+  }
+
+  // ============================================
+  // LẤY DANH SÁCH LÁ SỐ ĐÃ LƯU CỦA USER (CẦN AUTH)
+  // ============================================
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @ApiBearerAuth()
+  @Get('my-charts')
+  @ApiOperation({
+    summary: 'Lấy danh sách lá số Tử Vi đã lưu của user',
+    description: 'Trả về tất cả lá số Tử Vi mà user đã tạo và lưu.',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách lá số được trả về thành công.' })
+  @ApiResponse({ status: 401, description: 'Không được ủy quyền. Yêu cầu JWT token hợp lệ.' })
+  async getMyCharts(@Req() req): Promise<any[]> {
+    const userId = req.user.id;
+    return this.tuviService.getUserCharts(userId);
+  }
+
+  // ============================================
+  // LƯU LÁ SỐ VÀO DATABASE (CẦN AUTH)
+  // ============================================
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @ApiBearerAuth()
+  @Post('create-chart')
+  @ApiOperation({
+    summary: 'Lưu lá số Tử Vi vào database',
+    description: 'Người dùng đã đăng nhập có thể lưu lá số vào tài khoản của mình.',
+  })
+  @ApiBody({ type: CreateTuViChartDto })
+  @ApiResponse({ status: 201, description: 'Lá số được lưu thành công.' })
+  @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ.' })
   @ApiResponse({ status: 401, description: 'Không được ủy quyền. Yêu cầu JWT token hợp lệ.' })
   async createTuViChart(
     @Body() createTuViChartDto: CreateTuViChartDto,
@@ -41,6 +85,7 @@ export class TuViController {
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @ApiBearerAuth()
   @Get(':chartId')
   @ApiOperation({
     summary: 'Lấy lá số Tử Vi theo ID',
@@ -61,6 +106,7 @@ export class TuViController {
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @ApiBearerAuth()
   @Post(':chartId/interpret-ai')
   @ApiOperation({
     summary: 'Yêu cầu AI luận giải lá số Tử Vi',
