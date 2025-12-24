@@ -127,7 +127,7 @@ export class CommentService {
     commentId: number,
     userId: number,
     dto: ReplyCommentDto,
-    files?: MulterFile[],
+    files?: Express.Multer.File[],
   ) {
     const parent = await this.prisma.comment.findUnique({
       where: { id: commentId },

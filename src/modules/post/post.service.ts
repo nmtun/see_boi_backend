@@ -16,7 +16,6 @@ import {
   Prisma,
 } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
-import { File as MulterFile } from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 
 @Injectable()
@@ -460,7 +459,7 @@ export class PostService {
     content: string,
     parentId?: number,
     isAnonymous?: boolean,
-    files?: MulterFile[],
+    files?: Express.Multer.File[],
   ) {
     const post = await this.prisma.post.findUnique({
       where: {

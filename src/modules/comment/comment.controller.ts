@@ -104,7 +104,7 @@ export class CommentController {
     @Param('id') id: string,
     @Body() body: any,
     @Req() req,
-    @UploadedFiles() files?: MulterFile[],
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     return this.commentService.reply(
       +id,

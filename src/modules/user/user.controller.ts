@@ -228,6 +228,32 @@ export class UserController {
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get(':id/is-following')
+  @ApiOperation({ 
+    summary: 'Kiểm tra trạng thái follow',
+    description: 'Kiểm tra xem người dùng hiện tại có đang theo dõi người dùng khác không' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng cần kiểm tra', type: Number })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Trạng thái follow',
+    schema: {
+      type: 'object',
+      properties: {
+        isFollowing: { type: 'boolean', example: true },
+        userId: { type: 'number', example: 2 }
+      }
+    }
+  })
+  async checkFollowing(@Req() req, @Param('id') id: string) {
+    const isFollowing = await this.userService.isFollowing(req.user.id, +id);
+    return {
+      isFollowing,
+      userId: +id,
+    };
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/unfollow')
   @ApiOperation({
     summary: 'Hủy theo dõi người dùng',

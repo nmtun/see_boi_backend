@@ -5,7 +5,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/auth/guard/roles.guard';
 import { ApiConsumes, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
-import { File as MulterFile } from 'multer';
 import { storage } from 'src/utils/cloudinary.storage';
 
 @Controller('upload')
@@ -32,7 +31,7 @@ export class UploadController {
     }
   })
   @ApiResponse({ status: 201, description: 'Upload thành công' })
-  async uploadImage(@UploadedFile() file?: MulterFile) {
+  async uploadImage(@UploadedFile() file?: Express.Multer.File) {
     if (file && (file as any).secure_url) {
       return { imageUrl: (file as any).secure_url };
     }
