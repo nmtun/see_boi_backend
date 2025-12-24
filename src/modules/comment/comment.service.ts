@@ -10,7 +10,6 @@ import { VoteType } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
 import * as fs from 'fs';
-import { File as MulterFile } from 'multer';
 
 @Injectable()
 export class CommentService {
@@ -113,7 +112,7 @@ export class CommentService {
     commentId: number,
     userId: number,
     dto: ReplyCommentDto,
-    files?: MulterFile[],
+    files?: Express.Multer.File[],
   ) {
     const parent = await this.prisma.comment.findUnique({
       where: { id: commentId },

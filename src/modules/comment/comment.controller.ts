@@ -27,7 +27,6 @@ import {
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { storage } from 'src/utils/cloudinary.storage';
-import { File as MulterFile } from 'multer';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
@@ -104,7 +103,7 @@ export class CommentController {
     @Param('id') id: string,
     @Body() body: any,
     @Req() req,
-    @UploadedFiles() files?: MulterFile[],
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     return this.commentService.reply(
       +id,

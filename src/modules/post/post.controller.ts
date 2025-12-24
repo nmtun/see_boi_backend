@@ -35,7 +35,6 @@ import {
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { storage } from '../../utils/cloudinary.storage';
-import { File as MulterFile } from 'multer';
 import { UploadedFile } from '@nestjs/common';
 
 @ApiTags('Posts')
@@ -313,7 +312,7 @@ export class PostController {
     @Body('content') content: string,
     @Body('parentId') parentId?: number,
     @Body('isAnonymous') isAnonymous?: boolean,
-    @UploadedFiles() files?: MulterFile[],
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     const comment = await this.postService.commentOnPost(
       +id,
