@@ -18,7 +18,6 @@ import {
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { File as MulterFile } from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
-import * as fs from 'fs';
 
 @Injectable()
 export class PostService {
@@ -41,7 +40,7 @@ export class PostService {
   }
 
   // tạo bài viết
-  async create(userId: number, dto: CreatePostDto) {
+  async create(userId: number, dto: CreatePostDto, files?: Array<MulterFile>) {
     let tagIds = dto.tagIds;
     // loại bỏ tag trùng
     if (tagIds) {
@@ -57,6 +56,18 @@ export class PostService {
       : dto.content
         ? PostContentFormat.PLAIN_TEXT
         : PostContentFormat.TIPTAP_JSON;
+
+    // Get image URLs from CloudinaryStorage
+    const imageUrls: string[] = [];
+    if (files && files.length > 0) {
+      for (const file of files) {
+        const url =
+          (file as any).path || (file as any).url || (file as any).secure_url;
+        if (url) {
+          imageUrls.push(url);
+        }
+      }
+    }
 
     const post = await this.prisma.post.create({
       data: {
@@ -84,6 +95,18 @@ export class PostService {
         tags: { include: { tag: true } },
       },
     });
+
+    // Create images if URLs provided
+    if (imageUrls.length > 0) {
+      await this.prisma.image.createMany({
+        data: imageUrls.map((url) => ({
+          url,
+          type: 'POST',
+          entityId: post.id,
+          postId: post.id,
+        })),
+      });
+    }
 
     let poll: any = null;
     if (dto.poll) {
@@ -118,8 +141,17 @@ export class PostService {
       }
     }
 
+    // Fetch post with images
+    const postWithImages = await this.prisma.post.findUnique({
+      where: { id: post.id },
+      include: {
+        tags: { include: { tag: true } },
+        images: true,
+      },
+    });
+
     return {
-      ...post,
+      ...postWithImages,
       poll,
     };
   }
@@ -276,9 +308,77 @@ export class PostService {
   }
 
   async remove(postId: number, userId: number) {
-    return this.prisma.post.deleteMany({
+    const post = await this.prisma.post.findUnique({
       where: { id: postId, userId },
+      include: { images: true },
     });
+    if (!post) throw new NotFoundException('Post not found');
+
+    // Delete images from Cloudinary
+    if (post.images && post.images.length > 0) {
+      for (const image of post.images) {
+        try {
+          const publicId = this.extractPublicIdFromUrl(image.url);
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId);
+          }
+        } catch (error) {
+          console.error('Error deleting image from Cloudinary:', error);
+        }
+      }
+    }
+
+    // Delete related records first (to avoid foreign key constraint errors)
+    await this.prisma.$transaction([
+      // Delete post views
+      this.prisma.postView.deleteMany({
+        where: { postId },
+      }),
+      // Delete bookmarks
+      this.prisma.bookmark.deleteMany({
+        where: { postId },
+      }),
+      // Delete post likes
+      this.prisma.postLike.deleteMany({
+        where: { postId },
+      }),
+      // Delete notifications related to this post
+      this.prisma.notification.deleteMany({
+        where: { refId: postId, type: { in: ['POST_LIKE', 'POST_COMMENT'] } },
+      }),
+      // Delete images
+      this.prisma.image.deleteMany({
+        where: { postId },
+      }),
+      // Delete comments and their votes (cascade should handle this, but to be safe)
+      this.prisma.commentVote.deleteMany({
+        where: { comment: { postId } },
+      }),
+      this.prisma.comment.deleteMany({
+        where: { postId },
+      }),
+      // Delete poll votes and options if exists
+      this.prisma.pollOption.deleteMany({
+        where: { poll: { postId } },
+      }),
+      this.prisma.poll.deleteMany({
+        where: { postId },
+      }),
+      // Delete post tags
+      this.prisma.postTag.deleteMany({
+        where: { postId },
+      }),
+      // Delete post edit history
+      this.prisma.postEditHistory.deleteMany({
+        where: { postId },
+      }),
+      // Finally delete the post
+      this.prisma.post.delete({
+        where: { id: postId },
+      }),
+    ]);
+
+    return { message: 'Post deleted successfully' };
   }
 
   // like & unlike bài viết
@@ -380,29 +480,17 @@ export class PostService {
       }
     }
 
-    // Upload tất cả ảnh lên Cloudinary
+    // Get image URLs from CloudinaryStorage
     const imageUrls: string[] = [];
     if (files && files.length > 0) {
       for (const file of files) {
-        // Nếu file đã được Cloudinary middleware xử lý
-        if ((file as any).secure_url) {
-          imageUrls.push((file as any).secure_url);
-        } else {
-          // Upload thủ công nếu chưa
-          const result = await cloudinary.uploader.upload(file.path, {
-            folder: 'comments',
-            resource_type: 'auto',
-          });
-          imageUrls.push(result.secure_url);
-
-          // Xóa file tạm nếu tồn tại
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
+        const url =
+          (file as any).path || (file as any).url || (file as any).secure_url;
+        if (url) {
+          imageUrls.push(url);
         }
       }
     }
-
     const comment = await this.prisma.comment.create({
       data: {
         postId,
@@ -792,5 +880,17 @@ export class PostService {
         poll: { include: { options: true } },
       },
     });
+  }
+
+  // Helper method to extract publicId from Cloudinary URL
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      const regex = /\/(?:v\d+\/)?([^\/]+\/[^\.]+)/;
+      const match = url.match(regex);
+      return match ? match[1] : null;
+    } catch (error) {
+      console.error('Error extracting publicId from URL:', error);
+      return null;
+    }
   }
 }
