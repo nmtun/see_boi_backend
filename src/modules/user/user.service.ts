@@ -162,10 +162,10 @@ export class UserService {
 
   // xoá ảnh đại diện cũ trên Cloudinary
   async deleteAvatar(avatarUrl: string) {
-    const parts = avatarUrl.split('/');
-    const publicIdWithExtension = parts.slice(7).join('/').split('.')[0]; 
-    const publicId = publicIdWithExtension; 
-    await cloudinary.uploader.destroy(publicId);
+    const publicId = this.extractPublicIdFromUrl(avatarUrl);
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId);
+    }
   }
 
   // xoá ảnh đại diện cũ trên Cloudinary (chỉ nếu URL từ Cloudinary)
@@ -178,6 +178,18 @@ export class UserService {
         // Bỏ qua lỗi nếu không thể xóa (có thể ảnh đã bị xóa hoặc không tồn tại)
         console.warn('Không thể xóa avatar cũ trên Cloudinary:', error);
       }
+    }
+  }
+
+  // Helper method to extract publicId from Cloudinary URL
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      const regex = /\/(?:v\d+\/)?([^\/]+\/[^\.]+)/;
+      const match = url.match(regex);
+      return match ? match[1] : null;
+    } catch (error) {
+      console.error('Error extracting publicId from URL:', error);
+      return null;
     }
   }
 }

@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   Logger,
   UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { PostService } from './post.service';
@@ -34,7 +35,8 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { storage } from '../../utils/cloudinary.storage';
+import { postStorage, commentStorage } from '../../utils/cloudinary.storage';
+import { File as MulterFile } from 'multer';
 import { UploadedFile } from '@nestjs/common';
 
 @ApiTags('Posts')
@@ -50,6 +52,8 @@ export class PostController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post()
+  @UseInterceptors(FilesInterceptor('images', 10, { storage: postStorage }))
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Tạo bài viết mới',
     description:
@@ -61,8 +65,30 @@ export class PostController {
     description: 'Tạo bài viết thành công',
   })
   @ApiResponse({ status: 401, description: 'Chưa đăng nhập' })
-  async create(@Body() dto: CreatePostDto, @Req() req) {
-    const post = await this.postService.create(req.user.id, dto);
+  async create(
+    @Body() body: any,
+    @UploadedFiles() files: Array<MulterFile>,
+    @Req() req,
+  ) {
+    const dto: CreatePostDto = {
+      content: body.content,
+      title: body.title,
+      visibility: body.visibility,
+      isDraft: body.isDraft === 'true' || body.isDraft === true,
+      type: body.type,
+      tagIds: body.tagIds
+        ? Array.isArray(body.tagIds)
+          ? body.tagIds.map(Number)
+          : JSON.parse(body.tagIds)
+        : undefined,
+      contentJson: body.contentJson
+        ? typeof body.contentJson === 'string'
+          ? JSON.parse(body.contentJson)
+          : body.contentJson
+        : undefined,
+      contentText: body.contentText,
+    };
+    const post = await this.postService.create(req.user.id, dto, files);
     return new Posts(post);
   }
 
@@ -269,7 +295,7 @@ export class PostController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/comment')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('images', 10, { storage }))
+  @UseInterceptors(FilesInterceptor('images', 10, { storage: commentStorage }))
   @ApiOperation({
     summary: 'Bình luận bài viết với nhiều ảnh',
     description:
@@ -309,11 +335,14 @@ export class PostController {
   async commentOnPost(
     @Param('id') id: string,
     @Req() req,
-    @Body('content') content: string,
-    @Body('parentId') parentId?: number,
-    @Body('isAnonymous') isAnonymous?: boolean,
-    @UploadedFiles() files?: Express.Multer.File[],
+    @Body() body: any,
+    @UploadedFiles() files?: MulterFile[],
   ) {
+    const content = body.content;
+    const parentId = body.parentId ? +body.parentId : undefined;
+    const isAnonymous =
+      body.isAnonymous === 'true' || body.isAnonymous === true;
+
     const comment = await this.postService.commentOnPost(
       +id,
       req.user.id,

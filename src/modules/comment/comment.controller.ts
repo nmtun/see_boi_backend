@@ -26,7 +26,8 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { storage } from 'src/utils/cloudinary.storage';
+import { commentStorage } from 'src/utils/cloudinary.storage';
+import { File as MulterFile } from 'multer';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
@@ -68,7 +69,7 @@ export class CommentController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/reply')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('images', 10, { storage }))
+  @UseInterceptors(FilesInterceptor('images', 10, { storage: commentStorage }))
   @ApiOperation({
     summary: 'Trả lời bình luận với nhiều ảnh',
     description:

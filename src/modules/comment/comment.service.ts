@@ -9,7 +9,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { VoteType } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
-import * as fs from 'fs';
+import { File as MulterFile } from 'multer';
 
 @Injectable()
 export class CommentService {
@@ -82,20 +82,35 @@ export class CommentService {
   }
 
   async deleteCommentImage(imageUrl: string) {
-    const parts = imageUrl.split('/');
-    const publicIdWithExtension = parts.slice(7).join('/').split('.')[0];
-    const publicId = publicIdWithExtension;
-    await cloudinary.uploader.destroy(publicId);
+    const publicId = this.extractPublicIdFromUrl(imageUrl);
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId);
+    }
   }
 
   async remove(commentId: number, userId: number) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
+      include: { images: true },
     });
     if (!comment) throw new NotFoundException();
     if (comment.userId !== userId) throw new ForbiddenException();
 
     const postId = comment.postId;
+
+    // Delete images from Cloudinary
+    if (comment.images && comment.images.length > 0) {
+      for (const image of comment.images) {
+        try {
+          const publicId = this.extractPublicIdFromUrl(image.url);
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId);
+          }
+        } catch (error) {
+          console.error('Error deleting image from Cloudinary:', error);
+        }
+      }
+    }
 
     // Xóa cascade reply + vote
     await this.prisma.comment.delete({
@@ -126,25 +141,14 @@ export class CommentService {
       );
     }
 
-    // Upload tất cả ảnh lên Cloudinary
+    // Get image URLs from CloudinaryStorage
     const imageUrls: string[] = [];
     if (files && files.length > 0) {
       for (const file of files) {
-        // Nếu file đã được Cloudinary middleware xử lý
-        if ((file as any).secure_url) {
-          imageUrls.push((file as any).secure_url);
-        } else {
-          // Upload thủ công nếu chưa
-          const result = await cloudinary.uploader.upload(file.path, {
-            folder: 'comments',
-            resource_type: 'auto',
-          });
-          imageUrls.push(result.secure_url);
-
-          // Xóa file tạm nếu tồn tại
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
+        const url =
+          (file as any).path || (file as any).url || (file as any).secure_url;
+        if (url) {
+          imageUrls.push(url);
         }
       }
     }
@@ -280,5 +284,17 @@ export class CommentService {
         },
       },
     });
+  }
+
+  // Helper method to extract publicId from Cloudinary URL
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      const regex = /\/(?:v\d+\/)?([^\/]+\/[^\.]+)/;
+      const match = url.match(regex);
+      return match ? match[1] : null;
+    } catch (error) {
+      console.error('Error extracting publicId from URL:', error);
+      return null;
+    }
   }
 }
