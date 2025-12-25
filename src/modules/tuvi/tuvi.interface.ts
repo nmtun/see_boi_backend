@@ -60,6 +60,7 @@ export interface AspectScores {
 }
 
 export interface TuViInput {
+  name?: string;
   birthDate: string;
   birthHour: number;
   gender: string;

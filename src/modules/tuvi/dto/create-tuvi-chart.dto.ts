@@ -2,6 +2,10 @@
 import { IsString, IsNumber, IsIn, IsOptional, IsDateString, IsBoolean } from 'class-validator';
 
 export class CreateTuViChartDto {
+  @IsOptional()
+  @IsString()
+  name?: string; // Tên người dùng
+
   @IsDateString()
   birthDate: string; // YYYY-MM-DD
 
