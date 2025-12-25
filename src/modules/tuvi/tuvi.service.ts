@@ -124,6 +124,7 @@ export class TuViService {
 
       const chart: TuViChart = {
         input: {
+          name: dto.name,
           birthDate: dto.birthDate,
           birthHour: dto.birthHour,
           gender: dto.gender,
@@ -336,6 +337,7 @@ export class TuViService {
 
     return records.map(record => ({
       chartId: record.id,
+      name: record.chartData ? (record.chartData as any).input?.name : null,
       birthDate: record.birthDate,
       birthHour: record.birthHour,
       gender: record.gender,
