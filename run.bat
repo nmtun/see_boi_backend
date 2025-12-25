@@ -32,7 +32,21 @@ if errorlevel 1 (
 )
 echo    [OK] PostgreSQL container dang chay
 
-REM Chạy dự án
+REM Chạy Python Service (nếu có)
+if exist "python_services\venv" (
+    echo.
+    echo [INFO] Dang khoi dong Python Service...
+    cd python_services
+    start "Python Service" cmd /k "venv\Scripts\activate.bat && uvicorn main:app --reload --host 0.0.0.0 --port 6677"
+    cd ..
+    echo    [OK] Python Service dang chay trong cua so rieng (Port: 6677)
+    timeout /t 2 /nobreak >nul
+) else (
+    echo.
+    echo [WARNING] Python Service khong duoc setup. Bo qua...
+)
+
+REM Chạy NestJS project
 echo.
 echo [INFO] Dang khoi dong NestJS server...
 echo.
