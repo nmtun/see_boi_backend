@@ -56,43 +56,43 @@ class FaceAnalyzer:
         v2 = (self.landmarks[c]['x'] - self.landmarks[b]['x'], self.landmarks[c]['y'] - self.landmarks[b]['y'])
         return abs(math.degrees(math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])))
 
-def infer_all(self):
-        results = {}
-        for category, rules in TRAITS.items():
-            results[category] = []
-            
-            has_match = False
-            
-            for rule in rules:
-                key = rule.get('key')
-                if not hasattr(self, key): continue
+    def infer_all(self):
+            results = {}
+            for category, rules in TRAITS.items():
+                results[category] = []
                 
-                value = getattr(self, key)()
-                is_match = False
+                has_match = False
                 
-                if 'condition' in rule:
-                    if value == rule['condition']: is_match = True
-                elif 'threshold' in rule:
-                    if key == 'tam_dinh_diff':
-                        if value <= rule['threshold']: is_match = True
-                    else:
-                        if value >= rule['threshold']: is_match = True
-                else:
-                    lower = rule.get('min', float('-inf'))
-                    upper = rule.get('max', float('inf'))
-                    if lower <= value <= upper: is_match = True
-
-                if is_match:
-                    results[category].append({
-                        'trait': rule['trait'],
-                        'tags': rule.get('tags', [])
-                    })
-                    has_match = True
-
-            if not has_match:
-                results[category].append({
-                    'trait': f"Đặc điểm {category} cân đối, ổn định (Trung tính)",
-                    'tags': ['Neutral', 'Balanced']
-                })
+                for rule in rules:
+                    key = rule.get('key')
+                    if not hasattr(self, key): continue
                     
-        return results
+                    value = getattr(self, key)()
+                    is_match = False
+                    
+                    if 'condition' in rule:
+                        if value == rule['condition']: is_match = True
+                    elif 'threshold' in rule:
+                        if key == 'tam_dinh_diff':
+                            if value <= rule['threshold']: is_match = True
+                        else:
+                            if value >= rule['threshold']: is_match = True
+                    else:
+                        lower = rule.get('min', float('-inf'))
+                        upper = rule.get('max', float('inf'))
+                        if lower <= value <= upper: is_match = True
+
+                    if is_match:
+                        results[category].append({
+                            'trait': rule['trait'],
+                            'tags': rule.get('tags', [])
+                        })
+                        has_match = True
+
+                if not has_match:
+                    results[category].append({
+                        'trait': f"Đặc điểm {category} cân đối, ổn định (Trung tính)",
+                        'tags': ['Neutral', 'Balanced']
+                    })
+                        
+            return results
