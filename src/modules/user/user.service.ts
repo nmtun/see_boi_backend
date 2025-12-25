@@ -80,11 +80,18 @@ export class UserService {
       },
     });
 
-    this.notificationGateway.sendNotification(followingId, {
-      type: 'FOLLOW',
-      content: 'Bạn có người theo dõi mới',
-      refId: followerId,
+    // Lưu notification vào database
+    const notification = await this.prisma.notification.create({
+      data: {
+        userId: followingId,
+        type: 'FOLLOW',
+        content: 'Bạn có người theo dõi mới',
+        refId: followerId,
+      },
     });
+
+    // Gửi realtime notification qua WebSocket
+    this.notificationGateway.sendNotification(followingId, notification);
   }
 
   // bỏ theo dõi một user

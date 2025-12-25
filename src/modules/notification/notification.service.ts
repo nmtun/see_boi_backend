@@ -27,18 +27,23 @@ export class NotificationService {
     });
   }
 
-  // Đánh dấu đã đọc tất cả thông báo của user
-  async markAsRead(id: number, userId: number) {
+  // Đánh dấu đã đọc một thông báo
+  async markAsRead(userId: number, notificationId: number) {
+    // findUnique chỉ chấp nhận unique field (id), check ownership sau
     const noti = await this.prisma.notification.findUnique({
-      where: { id },
+      where: { id: notificationId },
     });
 
-    if (!noti || noti.userId !== userId) {
+    if (!noti) {
       throw new NotFoundException('Notification not found');
     }
 
+    if (noti.userId !== userId) {
+      throw new NotFoundException('Notification not found or access denied');
+    }
+
     return this.prisma.notification.update({
-      where: { id },
+      where: { id: notificationId },
       data: { isRead: true },
     });
   }
