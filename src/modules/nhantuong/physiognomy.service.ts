@@ -97,11 +97,27 @@ export class PhysiognomyService {
       const response = await lastValueFrom(
         this.httpService.post<PythonApiResponse>(this.pythonApiUrl, formData, {
           headers: formData.getHeaders(),
+          timeout: 60000, // 60 giây timeout
         }),
       );
       return response.data;
-    } catch (e) {
-      throw new InternalServerErrorException('Python service call failed');
+    } catch (e: any) {
+      // Log chi tiết lỗi để debug
+      console.error('Python service call failed:', {
+        url: this.pythonApiUrl,
+        error: e.message,
+        code: e.code,
+        response: e.response?.data,
+        status: e.response?.status,
+      });
+      
+      if (e.code === 'ECONNREFUSED') {
+        throw new InternalServerErrorException('Không thể kết nối đến Python service. Vui lòng kiểm tra service có đang chạy không.');
+      }
+      if (e.code === 'ETIMEDOUT' || e.message?.includes('timeout')) {
+        throw new InternalServerErrorException('Python service không phản hồi (timeout). Vui lòng thử lại sau.');
+      }
+      throw new InternalServerErrorException(`Python service call failed: ${e.message || 'Unknown error'}`);
     }
   }
 

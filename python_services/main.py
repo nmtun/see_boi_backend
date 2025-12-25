@@ -22,7 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-fmh = FaceMeshHandler(model_path="face_landmarker.task", num_faces=1)
+# Đường dẫn đến file model: trong cùng thư mục python_services
+MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "face_landmarker.task")
+
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Không tìm thấy file model tại: {MODEL_PATH}. Vui lòng đảm bảo file face_landmarker.task có trong thư mục python_services/")
+
+fmh = FaceMeshHandler(model_path=MODEL_PATH, num_faces=1)
 
 @app.post("/analyze-face")
 async def analyze_face(file: UploadFile = File(...)):

@@ -83,7 +83,6 @@ build/
 *.log
 
 # Shell scripts / temp
-*.sh
 *.tmp
 
 # VSCode

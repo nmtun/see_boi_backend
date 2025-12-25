@@ -79,67 +79,8 @@ if [ $? -ne 0 ]; then
 fi
 echo -e "${GREEN}   ✓ Đã chạy migration và generate Prisma Client${NC}"
 
-# Bước 6: Setup Python Service
-echo -e "\n${YELLOW}🐍 Bước 6: Setup Python Service...${NC}"
-if [ -d "python_services" ]; then
-    echo -e "${YELLOW}   Kiểm tra Python...${NC}"
-    if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
-        echo -e "${YELLOW}   ⚠️  Python chưa được cài đặt. Vui lòng cài đặt Python 3.8+ trước.${NC}"
-    else
-        PYTHON_CMD="python3"
-        if ! command -v python3 &> /dev/null; then
-            PYTHON_CMD="python"
-        fi
-        
-        echo -e "${YELLOW}   Kiểm tra pip...${NC}"
-        if ! command -v pip3 &> /dev/null && ! command -v pip &> /dev/null; then
-            echo -e "${YELLOW}   ⚠️  pip chưa được cài đặt. Vui lòng cài đặt pip trước.${NC}"
-        else
-            PIP_CMD="pip3"
-            if ! command -v pip3 &> /dev/null; then
-                PIP_CMD="pip"
-            fi
-            
-            cd python_services
-            
-            # Tạo virtual environment
-            echo -e "${YELLOW}   Tạo virtual environment...${NC}"
-            if [ -d "venv" ]; then
-                echo -e "${YELLOW}   Virtual environment đã tồn tại, bỏ qua...${NC}"
-            else
-                $PYTHON_CMD -m venv venv
-                if [ $? -eq 0 ]; then
-                    echo -e "${GREEN}   ✓ Đã tạo virtual environment${NC}"
-                else
-                    echo -e "${RED}   ❌ Lỗi khi tạo virtual environment${NC}"
-                    cd ..
-                    exit 1
-                fi
-            fi
-            
-            # Activate venv và cài đặt dependencies
-            if [ -f "requirements.txt" ]; then
-                echo -e "${YELLOW}   Cài đặt Python dependencies...${NC}"
-                source venv/bin/activate
-                $PIP_CMD install -r requirements.txt
-                if [ $? -eq 0 ]; then
-                    echo -e "${GREEN}   ✓ Đã cài đặt Python dependencies${NC}"
-                else
-                    echo -e "${YELLOW}   ⚠️  Có lỗi khi cài đặt Python dependencies${NC}"
-                fi
-                deactivate
-            else
-                echo -e "${YELLOW}   ⚠️  Không tìm thấy requirements.txt trong python_services${NC}"
-            fi
-            cd ..
-        fi
-    fi
-else
-    echo -e "${YELLOW}   ⚠️  Thư mục python_services không tồn tại${NC}"
-fi
-
-# Bước 7: Import dữ liệu seed
-echo -e "\n${YELLOW}🌱 Bước 7: Import dữ liệu seed...${NC}"
+# Bước 6: Import dữ liệu seed
+echo -e "\n${YELLOW}🌱 Bước 6: Import dữ liệu seed...${NC}"
 
 # Import users qua seed script
 if [ -f "seed-users.ts" ]; then
@@ -165,7 +106,6 @@ fi
 
 echo -e "\n${GREEN}✅ Setup hoàn tất!${NC}"
 echo -e "${GREEN}📌 Để chạy dự án:${NC}"
-echo -e "${GREEN}   - Tất cả services: ./run.sh${NC}"
-echo -e "${GREEN}   - Chỉ NestJS: npm run start:dev${NC}"
-echo -e "${GREEN}   - Chỉ Python Service: cd python_services && source venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 6677${NC}\n"
+echo -e "${GREEN}   - NestJS: ./run.sh hoặc npm run start:dev${NC}"
+echo -e "${GREEN}   - Python Service: ./run_python.sh${NC}\n"
 
