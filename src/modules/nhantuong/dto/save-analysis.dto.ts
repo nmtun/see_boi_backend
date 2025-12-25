@@ -15,7 +15,7 @@ export class SaveAnalysisDto {
 
   data: {
     report: any;
-    metrics: any;
+    interpret: any;
     landmarks: any;
     image_base64: string;
   };

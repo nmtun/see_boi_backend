@@ -1,11 +1,13 @@
 import {
   Controller,
   Post,
+  Get,
   UseGuards,
   UseInterceptors,
   UploadedFile,
   Body,
   Req,
+  Param,
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -48,47 +50,37 @@ export class PhysiognomyController {
     @UploadedFile() file: Express.Multer.File,
     @Req() req,
   ): Promise<PhysiognomyResponse> {
-    if (!file) {
-      throw new BadRequestException('Image file is required');
-    }
-
-    const userId = req.user.id;
-    return this.physiognomyService.preview(userId, file);
-  }
-
-  @UseGuards(AuthGuard('jwt'))
-  @Post('save')
-  @ApiOperation({ summary: 'Save analyzed traits to database' })
-  async save(
-    @Body() dto: SaveAnalysisDto,
-    @Req() req,
-  ): Promise<PhysiognomyResponse> {
-    if (!dto.data || !dto.data.report) {
-      throw new BadRequestException('Missing analysis data');
-    }
-
-    const userId = req.user.id;
-    return this.physiognomyService.save(userId, dto);
+    if (!file) throw new BadRequestException('Image file is required');
+    return this.physiognomyService.preview(req.user.id, file);
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('interpret')
-  @ApiOperation({ summary: 'Interpret traits (temporary: echo analyzed data)' })
-  async interpret(
-    @Body() dto: SaveAnalysisDto,
-  ): Promise<PhysiognomyResponse> {
-    if (!dto.data || !dto.data.report) {
-      throw new BadRequestException('Missing data for interpretation');
-    }
+  @ApiOperation({ summary: 'Get AI interpretation for traits' })
+  async interpret(@Body() dto: SaveAnalysisDto): Promise<PhysiognomyResponse> {
+    if (!dto.data || !dto.data.report) throw new BadRequestException('Missing report data');
+    return this.physiognomyService.interpretTraits(dto);
+  }
 
-    return {
-      success: true,
-      data: {
-        report: dto.data.report,
-        metrics: dto.data.metrics,
-        landmarks: dto.data.landmarks,
-        image_base64: dto.data.image_base64,
-      },
-    };
+  @UseGuards(AuthGuard('jwt'))
+  @Post('save')
+  @ApiOperation({ summary: 'Save all data (including interpret if exists)' })
+  async save(@Body() dto: SaveAnalysisDto, @Req() req): Promise<PhysiognomyResponse> {
+    if (!dto.data || !dto.data.report) throw new BadRequestException('Missing analysis data');
+    return this.physiognomyService.save(req.user.id, dto);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('history')
+  @ApiOperation({ summary: 'Get list of past analyses for current user' })
+  async getHistory(@Req() req) {
+    return this.physiognomyService.getHistory(req.user.id);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('history/:id')
+  @ApiOperation({ summary: 'Get detail of a specific past analysis' })
+  async getDetail(@Req() req, @Param('id') id: string) {
+    return this.physiognomyService.getDetail(req.user.id, +id);
   }
 }
