@@ -217,7 +217,7 @@ export class CommentService {
           userId: parent.userId,
           type: 'POST_COMMENT',
           content: 'Có người trả lời bình luận của bạn',
-          refId: replyComment.id,
+          refId: replyComment.postId,
         },
       });
 

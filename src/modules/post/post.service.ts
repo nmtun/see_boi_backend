@@ -39,7 +39,11 @@ export class PostService {
   }
 
   // tạo bài viết
-  async create(userId: number, dto: CreatePostDto, files?: Array<Express.Multer.File>) {
+  async create(
+    userId: number,
+    dto: CreatePostDto,
+    files?: Array<Express.Multer.File>,
+  ) {
     let tagIds = dto.tagIds;
     // loại bỏ tag trùng
     if (tagIds) {
@@ -555,7 +559,7 @@ export class PostService {
           userId: post.userId,
           type: 'POST_COMMENT',
           content: 'Có bình luận mới trên bài viết của bạn',
-          refId: comment.id,
+          refId: post.id,
         },
       });
 
