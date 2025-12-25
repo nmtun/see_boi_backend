@@ -56,7 +56,7 @@ class FaceAnalyzer:
         v2 = (self.landmarks[c]['x'] - self.landmarks[b]['x'], self.landmarks[c]['y'] - self.landmarks[b]['y'])
         return abs(math.degrees(math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])))
 
-def infer_all(self):
+    def infer_all(self):
         results = {}
         for category, rules in TRAITS.items():
             results[category] = []

@@ -7,7 +7,10 @@ import { GoogleGeminiModule } from '../gemini/google-gemini.module';
 
 @Module({
   imports: [
-    HttpModule,
+    HttpModule.register({
+      timeout: 60000, // 60 giây timeout
+      maxRedirects: 5,
+    }),
     PrismaModule,
     GoogleGeminiModule 
   ],
