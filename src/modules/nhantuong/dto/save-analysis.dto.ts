@@ -18,25 +18,31 @@ export enum Gender {
 class AnalysisDataDto {
   @ApiProperty({
     example: 'Nguyễn Văn A',
-    description: 'Họ và tên người được phân tích',
+    description: 'Họ và tên người được phân tích (tùy chọn, nhưng nên cung cấp để có luận giải tổng quan mệnh cục chính xác hơn)',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  name: string;
+  name?: string;
 
   @ApiProperty({
     example: '2002-08-15',
-    description: 'Ngày tháng năm sinh (YYYY-MM-DD)',
+    description: 'Ngày tháng năm sinh (YYYY-MM-DD) (tùy chọn, nhưng nên cung cấp để có luận giải tổng quan mệnh cục chính xác hơn)',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  birthday: string;
+  birthday?: string;
 
   @ApiProperty({
     enum: Gender,
     example: Gender.MALE,
-    description: 'Giới tính (MALE | FEMALE)',
+    description: 'Giới tính (MALE | FEMALE) (tùy chọn, nhưng nên cung cấp để có luận giải tổng quan mệnh cục chính xác hơn)',
+    required: false,
   })
+  @IsOptional()
   @IsEnum(Gender)
-  gender: Gender;
+  gender?: Gender;
 
   @ApiProperty({
     description: 'Kết quả phân tích các đặc điểm khuôn mặt (tam đình, ngũ quan, ấn đường)',

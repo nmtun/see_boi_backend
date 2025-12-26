@@ -24,6 +24,8 @@ export interface PythonApiResponse {
 }
 
 export interface DetailedInterpret {
+  'tong-quan': string;
+
   tam_dinh: {
     thuong_dinh: string;
     trung_dinh: string;
@@ -64,6 +66,7 @@ export interface PhysiognomyResponse {
 }
 
 export const PHYSIOGNOMY_FALLBACK = {
+  'tong-quan': 'Dựa trên phân tích khuôn mặt và thông tin cá nhân, đây là một mệnh cục có nhiều tiềm năng phát triển. Sự kết hợp giữa các đặc điểm nhân tướng học cho thấy một cuộc đời với nhiều cơ hội và thách thức, cần sự nỗ lực và kiên trì để đạt được thành công.',
   tam_dinh: {
     thuong: 'Vùng trán (Thượng đình) đại diện cho trí tuệ và sự khởi đầu.',
     trung: 'Vùng từ mày đến mũi (Trung đình) đại diện cho nghị lực và trung vận.',

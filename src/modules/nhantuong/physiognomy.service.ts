@@ -33,13 +33,14 @@ export class PhysiognomyService {
     };
   }
 
-  async interpretTraits(dto: any): Promise<any> {
+  async interpretTraits(dto: SaveAnalysisDto): Promise<any> {
     if (!dto || !dto.data || !dto.data.report) {
       throw new BadRequestException('Dữ liệu không hợp lệ');
     }
 
-    const context = this.prepareAIContext(dto.data.report);
-    const interpretData = await this.callGeminiInterpret(context);
+    const { name, birthday, gender, report } = dto.data;
+    const context = this.prepareAIContext(report, { name, birthday, gender });
+    const interpretData = await this.callGeminiInterpret(context, { name, birthday, gender });
 
     return {
       success: true,
@@ -117,36 +118,54 @@ export class PhysiognomyService {
     }
   }
 
-  private async callGeminiInterpret(context: any): Promise<any> {
+  private async callGeminiInterpret(context: any, personalInfo?: { name?: string; birthday?: string; gender?: string }): Promise<any> {
+    const personalInfoText = personalInfo 
+      ? `\nThông tin cá nhân:\n- Tên: ${personalInfo.name || 'Chưa cung cấp'}\n- Ngày sinh: ${personalInfo.birthday || 'Chưa cung cấp'}\n- Giới tính: ${personalInfo.gender || 'Chưa cung cấp'}`
+      : '';
+    
     const prompt = `
-      Bạn là chuyên gia Nhân tướng học. Viết luận giải dựa trên Ngũ Quan, Tam Đình, Ấn Đường:
+      Bạn là chuyên gia Nhân tướng học. Viết luận giải dựa trên Ngũ Quan, Tam Đình, Ấn Đường:${personalInfoText}
       ${JSON.stringify(context)}
       YÊU CẦU:
       - JSON duy nhất, Tiếng Việt.
       - Cấu trúc: {
           "interpret": {
+            "tong-quan": "Luận giải tổng quan mệnh cục dựa trên thông tin cá nhân (tên, ngày sinh, giới tính). Đây là phần tổng hợp toàn diện về vận mệnh, tính cách, và triển vọng cuộc đời của người được phân tích.(Phần này chỉ sử dụng kiến thức về Tử vi, chưa sử dụng đến kiến thức nhân tướng học)",
             "tam_dinh": { "thuong_dinh": "...", "trung_dinh": "...", "ha_dinh": "...", "tong_quan": "..." },
             "ngu_quan": { "long_may": "...", "mat": "...", "mui": "...", "tai": "...", "mieng_cam": "..." },
             "an_duong": { "mo_ta": "...", "y_nghia": "...", "danh_gia": "..." },
             "loi_khuyen": []
           }
         }
+      - Trường "tong-quan" phải là luận giải tổng quan mệnh cục, kết hợp thông tin cá nhân với phân tích khuôn mặt để đưa ra nhận định toàn diện về vận mệnh, tính cách, và triển vọng cuộc đời.
     `;
     try {
       let aiText = await this.googleGeminiService.generateText(prompt);
       aiText = aiText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(aiText);
-      return parsed.interpret;
+      const result = parsed.interpret;
+      
+      // Đảm bảo có trường tong-quan, nếu không có thì thêm fallback
+      if (!result['tong-quan']) {
+        result['tong-quan'] = PHYSIOGNOMY_FALLBACK['tong-quan'] || 'Dựa trên phân tích khuôn mặt và thông tin cá nhân, đây là một mệnh cục có nhiều tiềm năng phát triển.';
+      }
+      
+      return result;
     } catch {
-      return PHYSIOGNOMY_FALLBACK;
+      const fallback = { ...PHYSIOGNOMY_FALLBACK };
+      if (!fallback['tong-quan']) {
+        fallback['tong-quan'] = 'Dựa trên phân tích khuôn mặt và thông tin cá nhân, đây là một mệnh cục có nhiều tiềm năng phát triển.';
+      }
+      return fallback;
     }
   }
 
-  private prepareAIContext(report: any) {
+  private prepareAIContext(report: any, personalInfo?: { name?: string; birthday?: string; gender?: string }) {
     const r = report || {};
     const joinTraits = (arr: any[], fallback: string) => (arr?.length ? arr.map((i) => i.trait).join('. ') : fallback);
 
     return {
+      personalInfo: personalInfo || {},
       tam_dinh: {
         thuong: joinTraits(r.tam_dinh?.filter((i: any) => i.trait.includes('Thượng')), PHYSIOGNOMY_FALLBACK.tam_dinh.thuong),
         trung: joinTraits(r.tam_dinh?.filter((i: any) => i.trait.includes('Trung')), PHYSIOGNOMY_FALLBACK.tam_dinh.trung),

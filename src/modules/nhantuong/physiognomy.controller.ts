@@ -127,11 +127,11 @@ export class PhysiognomyController {
   @Post('interpret')
   @ApiOperation({ 
     summary: 'Lấy giải thích AI cho các đặc điểm khuôn mặt',
-    description: 'Gửi dữ liệu phân tích khuôn mặt (từ preview) để nhận giải thích chi tiết bằng AI về ý nghĩa của các đặc điểm nhân tướng học. Kết quả không được lưu vào database.'
+    description: 'Gửi dữ liệu phân tích khuôn mặt (từ preview) cùng với thông tin cá nhân (tên, ngày sinh, giới tính) để nhận giải thích chi tiết bằng AI về ý nghĩa của các đặc điểm nhân tướng học và luận giải tổng quan mệnh cục. Kết quả không được lưu vào database.'
   })
   @ApiBody({ 
     type: SaveAnalysisDto,
-    description: 'Dữ liệu phân tích khuôn mặt từ endpoint preview'
+    description: 'Dữ liệu phân tích khuôn mặt từ endpoint preview, bao gồm thông tin cá nhân: name, birthday, gender'
   })
   @ApiResponse({ 
     status: 200, 
@@ -142,6 +142,7 @@ export class PhysiognomyController {
         data: {
           report: {},
           interpret: {
+            'tong-quan': 'Luận giải tổng quan mệnh cục dựa trên thông tin cá nhân (tên, ngày sinh, giới tính) kết hợp với phân tích khuôn mặt. Đây là phần tổng hợp toàn diện về vận mệnh, tính cách, và triển vọng cuộc đời của người được phân tích.',
             tam_dinh: {
               thuong_dinh: 'Giải thích về thượng đình...',
               trung_dinh: 'Giải thích về trung đình...',
