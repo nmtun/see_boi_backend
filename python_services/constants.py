@@ -26,5 +26,12 @@ TRAITS = {
         {'key': 'R_mouth_width', 'min': 1.05, 'trait': 'Miệng rộng: Quan hệ rộng, năng lực ngoại giao tốt', 'tags': ['Diplomatic', 'Social']},
         {'key': 'R_mouth_width', 'max': 0.85, 'trait': 'Miệng nhỏ: Thận trọng trong lời nói, kín kẽ', 'tags': ['Reserved']},
         {'key': 'Angle_jaw', 'max': 110, 'trait': 'Hàm vuông: Kiên định, chịu gian khổ tốt', 'tags': ['Resilient']}
+    ],
+    'an_duong': [
+    {'key': 'an_duong_width', 'min': 0.08, 'trait': 'Ấn đường rộng rãi: Sự nghiệp hanh thông, tinh thần minh mẫn', 'tags': ['Career', 'Clarity']},
+    {'key': 'an_duong_fullness', 'min': 0.5, 'trait': 'Ấn đường đầy đặn: Có quý nhân phù trợ, ít trở ngại', 'tags': ['Support', 'SmoothPath']},
+    {'key': 'an_duong_scar', 'condition': False, 'trait': 'Không có sẹo: Tinh thần và sức khỏe tốt', 'tags': ['Healthy', 'Calm']},
+    {'key': 'an_duong_mole', 'condition': False, 'trait': 'Không có nốt ruồi xấu: Đường công danh thuận lợi', 'tags': ['Fortunate']},
+    {'key': 'an_duong_lines', 'max': 2, 'trait': 'Đường vân gọn gàng: Tư duy tích cực, ít trở ngại lớn', 'tags': ['PositiveMindset']}
     ]
 }

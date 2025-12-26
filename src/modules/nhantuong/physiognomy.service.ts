@@ -5,7 +5,6 @@ import { lastValueFrom } from 'rxjs';
 import FormData from 'form-data';
 import {
   PythonApiResponse,
-  PhysiognomyResponse,
   FaceAnalysisReport,
   PHYSIOGNOMY_FALLBACK,
 } from './physiognomy.interface';
@@ -20,7 +19,7 @@ export class PhysiognomyService {
     private readonly prisma: PrismaService,
     private readonly httpService: HttpService,
     private googleGeminiService: GoogleGeminiService,
-  ) {}
+  ) { }
 
   async preview(userId: number, file: Express.Multer.File): Promise<any> {
     const pythonResult = await this.callPythonService(file);
@@ -35,24 +34,27 @@ export class PhysiognomyService {
   }
 
   async interpretTraits(dto: any): Promise<any> {
-    const { data } = dto;
-    if (!data || !data.report) throw new BadRequestException('Dữ liệu không hợp lệ');
+    if (!dto || !dto.data || !dto.data.report) {
+      throw new BadRequestException('Dữ liệu không hợp lệ');
+    }
 
-    const context = this.prepareAIContext(data.report);
+    const context = this.prepareAIContext(dto.data.report);
     const interpretData = await this.callGeminiInterpret(context);
 
     return {
       success: true,
-      data: {
-        interpret: interpretData,
-      },
+      data: { interpret: interpretData },
     };
   }
 
-  async save(userId: number, dto: SaveAnalysisDto): Promise<any> {
-    const { report, interpret, landmarks, image_base64 } = dto.data;
-    const tags = this.extractTags(report);
+  async save(
+    userId: number,
+    dto: SaveAnalysisDto & { name?: string; birthday?: string; gender?: string },
+  ): Promise<any> {
+    if (!dto || !dto.data) throw new BadRequestException('Dữ liệu không hợp lệ');
 
+    const { name, birthday, gender, report, interpret, landmarks } = dto.data;
+    const tags = this.extractTags(report);
     const record = await this.prisma.userFaceLandmarks.create({
       data: {
         userId,
@@ -60,16 +62,16 @@ export class PhysiognomyService {
         metrics: interpret ? (interpret as any) : {},
         landmarks: landmarks || {},
         tags,
+        name: name || '',
+        dob: birthday ? new Date(birthday) : new Date(),
+        gender: gender || '',
       },
     });
 
-    return {
-      success: true,
-      data: {
-        saved_id: record.id,
-      },
-    };
+    return { success: true, data: { saved_id: record.id } };
   }
+
+
 
   async getHistory(userId: number): Promise<any[]> {
     return this.prisma.userFaceLandmarks.findMany({
@@ -89,61 +91,60 @@ export class PhysiognomyService {
   private async callPythonService(file: Express.Multer.File): Promise<PythonApiResponse> {
     try {
       const formData = new FormData();
-      formData.append('file', file.buffer, {
-        filename: file.originalname,
-        contentType: file.mimetype,
-      });
+      formData.append('file', file.buffer, { filename: file.originalname, contentType: file.mimetype });
 
       const response = await lastValueFrom(
         this.httpService.post<PythonApiResponse>(this.pythonApiUrl, formData, {
           headers: formData.getHeaders(),
-          timeout: 60000, // 60 giây timeout
+          timeout: 60000,
         }),
       );
+
+      if (!response || !response.data) {
+        throw new InternalServerErrorException('Python service trả về dữ liệu không hợp lệ');
+      }
+
       return response.data;
     } catch (e: any) {
-      // Log chi tiết lỗi để debug
-      console.error('Python service call failed:', {
-        url: this.pythonApiUrl,
-        error: e.message,
-        code: e.code,
-        response: e.response?.data,
-        status: e.response?.status,
-      });
-      
+      console.error('Python service call failed:', e);
       if (e.code === 'ECONNREFUSED') {
-        throw new InternalServerErrorException('Không thể kết nối đến Python service. Vui lòng kiểm tra service có đang chạy không.');
+        throw new InternalServerErrorException('Không thể kết nối Python service.');
       }
       if (e.code === 'ETIMEDOUT' || e.message?.includes('timeout')) {
-        throw new InternalServerErrorException('Python service không phản hồi (timeout). Vui lòng thử lại sau.');
+        throw new InternalServerErrorException('Python service timeout.');
       }
-      throw new InternalServerErrorException(`Python service call failed: ${e.message || 'Unknown error'}`);
+      throw new InternalServerErrorException(`Python service lỗi: ${e.message || 'Unknown'}`);
     }
   }
 
   private async callGeminiInterpret(context: any): Promise<any> {
     const prompt = `
-      Bạn là chuyên gia Nhân tướng học. Hãy viết bài luận giải dựa trên dữ liệu Ngũ Quan và Tam Đình sau:
+      Bạn là chuyên gia Nhân tướng học. Viết luận giải dựa trên Ngũ Quan, Tam Đình, Ấn Đường:
       ${JSON.stringify(context)}
       YÊU CẦU:
-      - Trả về JSON duy nhất, ngôn ngữ Tiếng Việt.
-      - Cấu trúc: {"interpret": {"tam_dinh": {"thuong_dinh": "...", "trung_dinh": "...", "ha_dinh": "...", "tong_quan": "..."}, "ngu_quan": {"long_may": "...", "mat": "...", "mui": "...", "tai": "...", "mieng_cam": "..."}, "loi_khuyen": []}}
+      - JSON duy nhất, Tiếng Việt.
+      - Cấu trúc: {
+          "interpret": {
+            "tam_dinh": { "thuong_dinh": "...", "trung_dinh": "...", "ha_dinh": "...", "tong_quan": "..." },
+            "ngu_quan": { "long_may": "...", "mat": "...", "mui": "...", "tai": "...", "mieng_cam": "..." },
+            "an_duong": { "mo_ta": "...", "y_nghia": "...", "danh_gia": "..." },
+            "loi_khuyen": []
+          }
+        }
     `;
-
     try {
       let aiText = await this.googleGeminiService.generateText(prompt);
       aiText = aiText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(aiText);
       return parsed.interpret;
-    } catch (error) {
+    } catch {
       return PHYSIOGNOMY_FALLBACK;
     }
   }
 
   private prepareAIContext(report: any) {
     const r = report || {};
-    const joinTraits = (arr: any[], fallback: string) =>
-      arr && arr.length > 0 ? arr.map((i) => i.trait).join('. ') : fallback;
+    const joinTraits = (arr: any[], fallback: string) => (arr?.length ? arr.map((i) => i.trait).join('. ') : fallback);
 
     return {
       tam_dinh: {
@@ -158,17 +159,19 @@ export class PhysiognomyService {
         tai: joinTraits(r.tai, PHYSIOGNOMY_FALLBACK.ngu_quan.tai),
         mieng_cam: joinTraits(r.mieng_cam, PHYSIOGNOMY_FALLBACK.ngu_quan.mieng_cam),
       },
+      an_duong: r.an_duong || {
+        mo_ta: 'Ấn đường nằm giữa hai lông mày, thuộc trung đình.',
+        y_nghia: 'Phản ánh tinh thần, khí vận và sự thông suốt.',
+        danh_gia: 'Sáng và rộng là dấu hiệu tốt.',
+      },
     };
   }
 
   private extractTags(report: FaceAnalysisReport): string[] {
     const tags = new Set<string>();
-    Object.keys(report).forEach((key) => {
-      const items = (report as any)[key];
+    Object.values(report).forEach((items: any) => {
       if (Array.isArray(items)) {
-        items.forEach((i) => {
-          if (Array.isArray(i.tags)) i.tags.forEach((t: string) => tags.add(t));
-        });
+        items.forEach((i) => Array.isArray(i.tags) && i.tags.forEach((t: string) => tags.add(t)));
       }
     });
     return Array.from(tags);
