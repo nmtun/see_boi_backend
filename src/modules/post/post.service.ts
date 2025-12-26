@@ -17,12 +17,14 @@ import {
 } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class PostService {
   constructor(
     private readonly prisma: PrismaService,
     private notificationGateway: NotificationGateway,
+    private userService: UserService,
   ) {}
 
   private validateContentJsonSize(
@@ -152,6 +154,11 @@ export class PostService {
         images: true,
       },
     });
+
+    // Cộng 100 điểm cho user khi đăng bài (nếu không phải draft)
+    if (!post.isDraft) {
+      await this.userService.addXP(userId, 'POST', 100);
+    }
 
     return {
       ...postWithImages,
@@ -414,13 +421,24 @@ export class PostService {
 
       // Gửi socket realtime
       this.notificationGateway.sendLike(post.userId, notification);
+
+      // Cộng 5 điểm cho chủ bài viết
+      await this.userService.addXP(post.userId, 'LIKE_RECEIVED', 5);
     }
 
     return like;
   }
 
   async unlike(postId: number, userId: number) {
-    return this.prisma.postLike.delete({
+    // Lấy thông tin post để biết chủ bài viết
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { userId: true },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    // Xóa like
+    const result = await this.prisma.postLike.delete({
       where: {
         postId_userId: {
           postId,
@@ -428,6 +446,13 @@ export class PostService {
         },
       },
     });
+
+    // Chỉ trừ XP nếu người unlike khác chủ bài viết
+    if (post.userId !== userId) {
+      await this.userService.addXP(post.userId, 'LIKE_RECEIVED', -5);
+    }
+
+    return result;
   }
 
   // bài viết trending
@@ -567,6 +592,9 @@ export class PostService {
 
       // Gửi socket realtime
       this.notificationGateway.sendComment(post.userId, notification);
+
+      // Cộng 2 điểm cho chủ bài viết
+      await this.userService.addXP(post.userId, 'COMMENT', 2);
     }
 
     // Broadcast real-time comment to all users viewing this post
@@ -616,6 +644,27 @@ export class PostService {
       // sort === 'score': không sort ở DB, sẽ sort sau khi tính voteCounts
       orderBy = { createdAt: 'desc' }; // Tạm lấy mới nhất trước
     }
+
+    // Lấy tất cả votes của viewer (nếu có) cho các comments trong post này
+    const viewerVotes = viewerId
+      ? await this.prisma.commentVote.findMany({
+          where: {
+            userId: viewerId,
+            comment: {
+              postId,
+            },
+          },
+          select: {
+            commentId: true,
+            type: true,
+          },
+        })
+      : [];
+
+    // Tạo map để tra cứu nhanh vote của viewer
+    const viewerVoteMap = new Map(
+      viewerVotes.map((v) => [v.commentId, v.type]),
+    );
 
     const [comments, totalRootComments, totalAllComments] = await Promise.all([
       this.prisma.comment.findMany({
@@ -699,6 +748,14 @@ export class PostService {
           ? 'Ẩn danh'
           : comment.user?.fullName || 'Unknown';
 
+      // Lấy vote của viewer cho comment này
+      const viewerVoteType = viewerVoteMap.get(comment.id);
+      const userVote = viewerVoteType
+        ? viewerVoteType === 'UP'
+          ? 'up'
+          : 'down'
+        : null;
+
       return {
         ...comment,
         images: comment.images?.map((img) => img.url) || [],
@@ -709,6 +766,9 @@ export class PostService {
           downvotes,
           total: voteTotal,
         },
+        userVote,
+        hasUpvoted: userVote === 'up',
+        hasDownvoted: userVote === 'down',
         replies: comment.replies.map((reply) => {
           const replyUpvotes = reply.votes.filter(
             (v) => v.type === 'UP',
@@ -725,6 +785,14 @@ export class PostService {
               ? 'Ẩn danh'
               : reply.user?.fullName || 'Unknown';
 
+          // Lấy vote của viewer cho reply này
+          const replyViewerVoteType = viewerVoteMap.get(reply.id);
+          const replyUserVote = replyViewerVoteType
+            ? replyViewerVoteType === 'UP'
+              ? 'up'
+              : 'down'
+            : null;
+
           return {
             ...reply,
             images: reply.images?.map((img) => img.url) || [],
@@ -735,6 +803,9 @@ export class PostService {
               downvotes: replyDownvotes,
               total: replyVoteTotal,
             },
+            userVote: replyUserVote,
+            hasUpvoted: replyUserVote === 'up',
+            hasDownvoted: replyUserVote === 'down',
           };
         }),
       };
@@ -885,6 +956,73 @@ export class PostService {
         poll: { include: { options: true } },
       },
     });
+  }
+
+  // lấy số lượt xem của bài viết
+  async getViewCount(postId: number) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    const totalViews = await this.prisma.postView.count({
+      where: { postId },
+    });
+
+    const uniqueViews = await this.prisma.postView.groupBy({
+      by: ['userId'],
+      where: {
+        postId,
+        userId: { not: null },
+      },
+    });
+
+    const anonymousViews = await this.prisma.postView.count({
+      where: {
+        postId,
+        userId: null,
+      },
+    });
+
+    return {
+      totalViews,
+      uniqueViews: uniqueViews.length,
+      anonymousViews,
+    };
+  }
+
+  // lấy danh sách người đã xem bài viết (chỉ user đã đăng nhập)
+  async getViewDetails(postId: number, limit: number = 20) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    // Lấy danh sách người xem (distinct by userId) với thông tin user
+    const views = await this.prisma.postView.findMany({
+      where: {
+        postId,
+        userId: { not: null },
+      },
+      distinct: ['userId'],
+      take: limit,
+      orderBy: { viewedAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            userName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    return views.map((view) => ({
+      user: view.user,
+      viewedAt: view.viewedAt,
+    }));
   }
 
   // Helper method to extract publicId from Cloudinary URL
