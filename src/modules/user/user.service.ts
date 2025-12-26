@@ -154,6 +154,47 @@ export class UserService {
     });
   }
 
+  // thêm XP cho user
+  async addXP(
+    userId: number,
+    action: 'POST' | 'COMMENT' | 'LIKE_RECEIVED',
+    value: number,
+  ) {
+    // Tạo XP log
+    await this.prisma.xPLog.create({
+      data: {
+        userId,
+        action,
+        value,
+      },
+    });
+
+    // Cập nhật XP của user
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        xp: {
+          increment: value,
+        },
+      },
+      select: {
+        xp: true,
+        level: true,
+      },
+    });
+
+    // Tính toán level (mỗi 1000 XP = 1 level)
+    const newLevel = Math.floor(user.xp / 1000) + 1;
+    if (newLevel !== user.level) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { level: newLevel },
+      });
+    }
+
+    return user;
+  }
+
   // badges
   async getUserBadges(userId: number) {
     return this.prisma.userBadge.findMany({

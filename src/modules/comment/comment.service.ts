@@ -9,12 +9,14 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { VoteType } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class CommentService {
   constructor(
     private prisma: PrismaService,
     private notificationGateway: NotificationGateway,
+    private userService: UserService,
   ) {}
 
   async update(commentId: number, userId: number, dto: UpdateCommentDto) {
@@ -256,7 +258,17 @@ export class CommentService {
     });
     if (!comment) throw new NotFoundException();
 
-    return this.prisma.commentVote.upsert({
+    // Kiểm tra vote hiện tại của user
+    const existingVote = await this.prisma.commentVote.findUnique({
+      where: {
+        commentId_userId: {
+          commentId,
+          userId,
+        },
+      },
+    });
+
+    const result = await this.prisma.commentVote.upsert({
       where: {
         commentId_userId: {
           commentId,
@@ -272,10 +284,41 @@ export class CommentService {
         type,
       },
     });
+
+    // Xử lý XP cho chủ comment (không tự vote cho mình)
+    if (comment.userId !== userId) {
+      // Nếu đổi từ DOWN sang UP hoặc ngược lại
+      if (existingVote && existingVote.type !== type) {
+        if (type === 'UP') {
+          // Đổi từ downvote sang upvote: +3 (upvote) + 2 (hoàn lại downvote) = +5
+          await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', 5);
+        } else {
+          // Đổi từ upvote sang downvote: -3 (mất upvote) - 2 (downvote) = -5
+          await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', -5);
+        }
+      } else if (!existingVote) {
+        // Vote mới
+        if (type === 'UP') {
+          // Upvote: +3 điểm
+          await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', 3);
+        } else {
+          // Downvote: -2 điểm
+          await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', -2);
+        }
+      }
+    }
+
+    return result;
   }
 
   async removeVote(commentId: number, userId: number) {
-    return this.prisma.commentVote.delete({
+    // Lấy thông tin comment và vote hiện tại
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException();
+
+    const existingVote = await this.prisma.commentVote.findUnique({
       where: {
         commentId_userId: {
           commentId,
@@ -283,6 +326,28 @@ export class CommentService {
         },
       },
     });
+
+    const result = await this.prisma.commentVote.delete({
+      where: {
+        commentId_userId: {
+          commentId,
+          userId,
+        },
+      },
+    });
+
+    // Xử lý XP khi remove vote (hoàn lại điểm)
+    if (existingVote && comment.userId !== userId) {
+      if (existingVote.type === 'UP') {
+        // Remove upvote: -3 điểm
+        await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', -3);
+      } else {
+        // Remove downvote: +2 điểm
+        await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', 2);
+      }
+    }
+
+    return result;
   }
 
   // Helper method to extract publicId from Cloudinary URL

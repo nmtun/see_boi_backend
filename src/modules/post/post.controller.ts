@@ -559,4 +559,77 @@ export class PostController {
     const posts = await this.postService.getPostsByUser(+id);
     return posts;
   }
+
+  @Get(':id/views')
+  @ApiOperation({
+    summary: 'Lấy số lượt xem bài viết',
+    description:
+      'Lấy thống kê lượt xem của bài viết bao gồm tổng lượt xem, lượt xem unique và lượt xem ẩn danh',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiResponse({
+    status: 200,
+    description: 'Thống kê lượt xem',
+    schema: {
+      type: 'object',
+      properties: {
+        totalViews: {
+          type: 'number',
+          example: 150,
+          description: 'Tổng số lượt xem',
+        },
+        uniqueViews: {
+          type: 'number',
+          example: 45,
+          description: 'Số người xem unique (đã đăng nhập)',
+        },
+        anonymousViews: {
+          type: 'number',
+          example: 105,
+          description: 'Số lượt xem ẩn danh (chưa đăng nhập)',
+        },
+      },
+    },
+  })
+  async getViewCount(@Param('id') id: string) {
+    return this.postService.getViewCount(+id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get(':id/views/details')
+  @ApiOperation({
+    summary: 'Lấy danh sách người đã xem bài viết',
+    description:
+      'Lấy danh sách người dùng đã đăng nhập và xem bài viết này. Chỉ hiển thị người xem unique (không trùng lặp). Yêu cầu đăng nhập.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách người xem',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          user: {
+            type: 'object',
+            properties: {
+              id: { type: 'number' },
+              fullName: { type: 'string' },
+              userName: { type: 'string' },
+              avatarUrl: { type: 'string' },
+            },
+          },
+          viewedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
+  })
+  async getViewDetails(
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+  ) {
+    const limitNum = limit ? parseInt(limit) : 20;
+    return this.postService.getViewDetails(+id, limitNum);
+  }
 }
