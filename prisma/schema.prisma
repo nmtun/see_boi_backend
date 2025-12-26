@@ -458,6 +458,9 @@ model UserFaceLandmarks {
   id        Int      @id @default(autoincrement())
   userId    Int
   metrics   Json
+  name      String  
+  dob       DateTime 
+  gender    String  
   report    Json
   landmarks Json
   tags      String[]

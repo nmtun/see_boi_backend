@@ -56,20 +56,35 @@ class FaceAnalyzer:
         v2 = (self.landmarks[c]['x'] - self.landmarks[b]['x'], self.landmarks[c]['y'] - self.landmarks[b]['y'])
         return abs(math.degrees(math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])))
 
+    def an_duong_width(self):
+            left = self.landmarks.get('brow_start_left', {'x':0})['x']
+            right = self.landmarks.get('brow_start_right', {'x':0})['x']
+            return abs(right - left) / self._face_height() if self._face_height() > 0 else 0
+
+    def an_duong_fullness(self):
+        glabella_y = self.landmarks.get('glabella', {'y':0})['y']
+        nose_y = self.landmarks.get('nose_base', {'y':0})['y']
+        return (nose_y - glabella_y) / self._face_height() if self._face_height() > 0 else 0
+
+    def an_duong_scar(self):
+        return False
+
+    def an_duong_mole(self):
+        return False
+
+    def an_duong_lines(self):
+        return 1
+
     def infer_all(self):
         results = {}
         for category, rules in TRAITS.items():
             results[category] = []
-            
             has_match = False
-            
             for rule in rules:
                 key = rule.get('key')
                 if not hasattr(self, key): continue
-                
                 value = getattr(self, key)()
                 is_match = False
-                
                 if 'condition' in rule:
                     if value == rule['condition']: is_match = True
                 elif 'threshold' in rule:
@@ -81,18 +96,15 @@ class FaceAnalyzer:
                     lower = rule.get('min', float('-inf'))
                     upper = rule.get('max', float('inf'))
                     if lower <= value <= upper: is_match = True
-
                 if is_match:
                     results[category].append({
                         'trait': rule['trait'],
                         'tags': rule.get('tags', [])
                     })
                     has_match = True
-
             if not has_match:
                 results[category].append({
                     'trait': f"Đặc điểm {category} cân đối, ổn định (Trung tính)",
                     'tags': ['Neutral', 'Balanced']
                 })
-                    
         return results

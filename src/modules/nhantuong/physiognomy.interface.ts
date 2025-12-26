@@ -5,11 +5,16 @@ export interface FaceTrait {
 
 export interface FaceAnalysisReport {
   tam_dinh?: FaceTrait[];
-  long_may?: FaceTrait[]; 
-  mat?: FaceTrait[];
-  mui?: FaceTrait[];     
-  tai?: FaceTrait[];     
-  mieng_cam?: FaceTrait[]; 
+
+  ngu_quan?: {
+    long_may?: FaceTrait[];
+    mat?: FaceTrait[];
+    mui?: FaceTrait[];
+    tai?: FaceTrait[];
+    mieng_cam?: FaceTrait[];
+  };
+
+  an_duong?: FaceTrait[];
 }
 
 export interface PythonApiResponse {
@@ -25,6 +30,7 @@ export interface DetailedInterpret {
     ha_dinh: string;
     tong_quan: string;
   };
+
   ngu_quan: {
     long_may: string;
     mat: string;
@@ -32,14 +38,25 @@ export interface DetailedInterpret {
     tai: string;
     mieng_cam: string;
   };
+
+  an_duong: {
+    mo_ta: string;
+    y_nghia: string;
+    danh_gia: string;
+  };
+
   loi_khuyen: string[];
 }
 
 export interface PhysiognomyResponse {
   success: boolean;
   data: {
+    fullName: string;
+    birthDate: string; 
+    gender: 'MALE' | 'FEMALE';
+
     report: FaceAnalysisReport;
-    interpret: DetailedInterpret; 
+    interpret?: DetailedInterpret;
     landmarks: any;
     image_base64: string;
     saved_id?: number;
@@ -48,15 +65,21 @@ export interface PhysiognomyResponse {
 
 export const PHYSIOGNOMY_FALLBACK = {
   tam_dinh: {
-    thuong: "Vùng trán (Thượng đình) đại diện cho trí tuệ và sự khởi đầu.",
-    trung: "Vùng từ mày đến mũi (Trung đình) đại diện cho nghị lực thân tự lập thân.",
-    ha: "Vùng cằm và miệng (Hạ đình) đại diện cho thành quả và phúc đức hậu vận."
+    thuong: 'Vùng trán (Thượng đình) đại diện cho trí tuệ và sự khởi đầu.',
+    trung: 'Vùng từ mày đến mũi (Trung đình) đại diện cho nghị lực và trung vận.',
+    ha: 'Vùng cằm và miệng (Hạ đình) đại diện cho hậu vận và phúc đức.',
+    tong_quan: 'Tam đình cân đối thể hiện cuộc đời ổn định.',
   },
   ngu_quan: {
-    long_may: "Lông mày (Bảo thọ quan) thể hiện tình cảm anh em và thọ mệnh.",
-    mat: "Mắt (Giám sát quan) thể hiện thần khí và sự tinh tường.",
-    mui: "Mũi (Thẩm biện quan) là cung tài bạch, giữ tiền tài.",
-    tai: "Tai (Thái thính quan) thể hiện sự thông tuệ và vận may sớm.",
-    mieng_cam: "Miệng và Hàm thể hiện khả năng giao tiếp và sự kiên định."
-  }
+    long_may: 'Lông mày thể hiện tình cảm và nhân duyên.',
+    mat: 'Mắt thể hiện thần khí và trí tuệ.',
+    mui: 'Mũi là cung tài bạch, đại diện tài vận.',
+    tai: 'Tai thể hiện phúc thọ và trí tuệ sớm.',
+    mieng_cam: 'Miệng và cằm thể hiện hậu vận và khả năng giao tiếp.',
+  },
+  an_duong: {
+    mo_ta: 'Ấn đường nằm giữa hai lông mày, thuộc trung đình.',
+    y_nghia: 'Phản ánh tinh thần, khí vận và sự thông suốt.',
+    danh_gia: 'Sáng và rộng là dấu hiệu tốt.',
+  },
 };
