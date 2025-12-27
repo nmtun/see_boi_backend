@@ -145,6 +145,7 @@ model Post {
   contentJson   Json?
   contentText   String?
   contentFormat PostContentFormat @default(TIPTAP_JSON)
+  thumbnailUrl  String?
   type          PostType          @default(NORMAL)
   visibility    PostVisibility    @default(PUBLIC)
   status        PostStatus        @default(VISIBLE)

@@ -44,7 +44,10 @@ export class PostService {
   async create(
     userId: number,
     dto: CreatePostDto,
-    files?: Array<Express.Multer.File>,
+    files?: {
+      thumbnail?: Express.Multer.File[];
+      images?: Express.Multer.File[];
+    },
   ) {
     let tagIds = dto.tagIds;
     // loại bỏ tag trùng
@@ -62,10 +65,20 @@ export class PostService {
         ? PostContentFormat.PLAIN_TEXT
         : PostContentFormat.TIPTAP_JSON;
 
-    // Get image URLs from CloudinaryStorage
+    // Extract thumbnail URL from uploaded file
+    let thumbnailUrl: string | undefined;
+    if (files?.thumbnail && files.thumbnail.length > 0) {
+      const thumbnailFile = files.thumbnail[0];
+      thumbnailUrl =
+        (thumbnailFile as any).path ||
+        (thumbnailFile as any).url ||
+        (thumbnailFile as any).secure_url;
+    }
+
+    // Get image URLs from CloudinaryStorage for content images
     const imageUrls: string[] = [];
-    if (files && files.length > 0) {
-      for (const file of files) {
+    if (files?.images && files.images.length > 0) {
+      for (const file of files.images) {
         const url =
           (file as any).path || (file as any).url || (file as any).secure_url;
         if (url) {
@@ -84,6 +97,7 @@ export class PostService {
           : undefined,
         contentText: dto.contentText ?? null,
         contentFormat,
+        thumbnailUrl: thumbnailUrl ?? null,
         type: dto.type,
         visibility: dto.visibility ?? PostVisibility.PUBLIC,
         isDraft: dto.isDraft ?? false,
@@ -325,6 +339,18 @@ export class PostService {
       include: { images: true },
     });
     if (!post) throw new NotFoundException('Post not found');
+
+    // Delete thumbnail from Cloudinary if exists
+    if (post.thumbnailUrl) {
+      try {
+        const publicId = this.extractPublicIdFromUrl(post.thumbnailUrl);
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+      } catch (error) {
+        console.error('Error deleting thumbnail from Cloudinary:', error);
+      }
+    }
 
     // Delete images from Cloudinary
     if (post.images && post.images.length > 0) {

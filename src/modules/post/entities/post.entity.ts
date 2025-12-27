@@ -8,6 +8,7 @@ export class Posts {
   contentJson?: Prisma.JsonValue | null;
   contentText?: string | null;
   contentFormat?: PostContentFormat;
+  thumbnailUrl?: string | null;
   type: PostType;
   visibility: PostVisibility;
   status: PostStatus;

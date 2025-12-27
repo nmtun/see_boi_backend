@@ -34,7 +34,7 @@ import {
   ApiBody,
   ApiConsumes,
 } from '@nestjs/swagger';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { postStorage, commentStorage } from '../../utils/cloudinary.storage';
 import { UploadedFile } from '@nestjs/common';
 
@@ -51,14 +51,46 @@ export class PostController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post()
-  @UseInterceptors(FilesInterceptor('images', 10, { storage: postStorage }))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'thumbnail', maxCount: 1 },
+        { name: 'images', maxCount: 10 },
+      ],
+      { storage: postStorage },
+    ),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Tạo bài viết mới',
     description:
-      'Tạo một bài viết mới. Có thể là bài viết thường hoặc bài viết có poll. Tất cả các trường đều là optional.',
+      'Tạo một bài viết mới với thumbnail (ảnh đại diện) và images (ảnh trong bài viết). Có thể là bài viết thường hoặc bài viết có poll. Tất cả các trường đều là optional.',
   })
-  @ApiBody({ type: CreatePostDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', example: 'Tiêu đề bài viết' },
+        content: { type: 'string', example: 'Nội dung bài viết' },
+        contentJson: { type: 'object', example: { type: 'doc', content: [] } },
+        contentText: { type: 'string', example: 'Nội dung plain text' },
+        visibility: { type: 'string', enum: ['PUBLIC', 'FOLLOWERS', 'PRIVATE', 'ANONYMOUS'], example: 'PUBLIC' },
+        isDraft: { type: 'boolean', example: false },
+        type: { type: 'string', enum: ['NORMAL', 'POLL'], example: 'NORMAL' },
+        tagIds: { type: 'array', items: { type: 'number' }, example: [1, 2, 3] },
+        thumbnail: {
+          type: 'string',
+          format: 'binary',
+          description: 'Ảnh đại diện/thumbnail của bài viết (1 ảnh)',
+        },
+        images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Ảnh trong bài viết (tối đa 10 ảnh)',
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: 'Tạo bài viết thành công',
@@ -66,7 +98,11 @@ export class PostController {
   @ApiResponse({ status: 401, description: 'Chưa đăng nhập' })
   async create(
     @Body() body: any,
-    @UploadedFiles() files: Array<Express.Multer.File>,
+    @UploadedFiles()
+    files: {
+      thumbnail?: Express.Multer.File[];
+      images?: Express.Multer.File[];
+    },
     @Req() req,
   ) {
     const dto: CreatePostDto = {
