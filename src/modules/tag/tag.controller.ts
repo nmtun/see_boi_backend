@@ -30,7 +30,7 @@ export class TagController {
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('ADMIN')
+  // @Roles('ADMIN')
   @Get()
   @ApiOperation({ 
     summary: 'Lấy danh sách tất cả tags (ADMIN)',
