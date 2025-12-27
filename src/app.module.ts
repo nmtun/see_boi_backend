@@ -16,12 +16,13 @@ import { TuViModule } from './modules/tuvi/tuvi.module';
 import { GoogleGeminiModule } from './modules/gemini/google-gemini.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { PhysiognomyModule } from './modules/nhantuong/physiognomy.module';
+import { TarotModule } from './modules/tarot/tarot.module';
 
 @Module({
   imports: [
     PrismaModule, 
     AuthModule, UserModule, PostModule, CommentModule, TagModule, CollectionModule, PollModule, BadgeModule, NotificationModule, ReportModule, TuViModule ,
-    GoogleGeminiModule, PhysiognomyModule,
+    GoogleGeminiModule, PhysiognomyModule, TarotModule,
     UploadModule
   ],
   controllers: [], 
