@@ -17,12 +17,13 @@ import { GoogleGeminiModule } from './modules/gemini/google-gemini.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { PhysiognomyModule } from './modules/nhantuong/physiognomy.module';
 import { TarotModule } from './modules/tarot/tarot.module';
+import { OpenAIModule } from './modules/openai/openai.module';
 
 @Module({
   imports: [
     PrismaModule, 
     AuthModule, UserModule, PostModule, CommentModule, TagModule, CollectionModule, PollModule, BadgeModule, NotificationModule, ReportModule, TuViModule ,
-    GoogleGeminiModule, PhysiognomyModule, TarotModule,
+    GoogleGeminiModule, PhysiognomyModule, TarotModule, OpenAIModule,
     UploadModule
   ],
   controllers: [], 

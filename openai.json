@@ -1,0 +1,35 @@
+{
+    "success": true,
+    "data": {
+      "question": "Tôi muốn hiểu sâu hơn về hành trình tình yêu của mình",
+      "cards": {
+        "card1": {
+          "name": "The Fool",
+          "question": "Năng lượng khi bước vào mối quan hệ"
+        },
+        "card2": {
+          "name": "The Tower",
+          "question": "Thử thách hay vấn đề trên hành trình yêu thương"
+        },
+        "card3": {
+          "name": "The Moon",
+          "question": "Dư âm từ những mối tình đã qua"
+        },
+        "card4": {
+          "name": "The Star",
+          "question": "Điều cần chữa lành, hoàn thiện hoặc học hỏi"
+        },
+        "card5": {
+          "name": "The Sun",
+          "question": "Thông điệp về yêu thương bản thân"
+        }
+      },
+      "reading": {
+        "nang-luong": "The Fool cho thấy khi bạn bước vào một mối quan hệ, bạn mang theo năng lượng khởi đầu, tinh thần phiêu lưu và lòng can đảm để tin tưởng. Bạn đến với trái tim cởi mở, tò mò và sẵn sàng chấp nhận những điều mới mẻ mà không quá gò bó bởi quá khứ. Điều này biểu hiện qua trực giác rằng mọi mối quan hệ đều là một hành trình học hỏi, bạn mang theo niềm tin vào khả năng phát triển chung và tầm nhìn lạc quan về tương lai. Những phẩm chất tích cực bạn đem đến còn bao gồm sự tự do, sáng tạo, hài hước và khả năng nhìn nhận người khác không theo khuôn mẫu cũ. Tuy nhiên The Fool cũng nhắc rằng năng lượng này có thể đi kèm chút ngây thơ, thiếu chuẩn bị hoặc mạo hiểm không cần thiết, vì vậy sức mạnh thật sự là giữ nguyên sự chân thành và phóng khoáng trong khi vẫn biết tự chủ, thiết lập ranh giới lành mạnh và giữ được tỉnh táo. Nói chung, bạn là người mang đến sức sống và hy vọng cho mối quan hệ, khiến đối phương cảm thấy được truyền cảm hứng để cùng bước tiếp.",
+        "thu-thach": "The Tower cảnh báo rằng trên hành trình yêu thương của bạn có thể xuất hiện những biến cố bất ngờ, những sự thật bị phơi bày hoặc những cấu trúc cảm xúc cũ bị phá vỡ. Thử thách có thể là sự sụp đổ của ảo tưởng, mâu thuẫn dữ dội, phản bội, hoặc những thay đổi đột ngột buộc bạn phải nhìn thẳng vào thực tại. Điều này đau đớn nhưng cần thiết: sự đổ vỡ sẽ giải phóng không gian cho điều chân thật hơn. Cách đối mặt là chuẩn bị tinh thần cho sự không ổn định, học cách chấp nhận rằng mất mát ban đầu có thể dẫn đến tái thiết xây dựng mạnh mẽ hơn, và giữ vững bản ngã giữa hỗn loạn. Hãy làm rõ ranh giới, tránh né trách nhiệm cá nhân, và giao tiếp thẳng thắn khi căng thẳng xuất hiện. Thực hành kỹ năng phục hồi: cho phép mình buồn, tìm nguồn hỗ trợ tin cậy, và khi cần, đặt ra giới hạn hoặc tạm dừng để tái cấu trúc. The Tower nhắc bạn rằng sau cơn giông là nền tảng mới — nếu bạn chuẩn bị đối mặt với sự sụp đổ bằng lòng dũng cảm, bạn sẽ xây được mối quan hệ chân thực hơn.",
+        "du-am": "The Moon tố cáo rằng những mối tình đã qua để lại dư âm của mơ hồ, nỗi sợ vô thức, và những hoang mang chưa được giải mã trong lòng bạn. Ảnh hưởng đó có thể biểu hiện qua nghi ngờ lẫn nhau, khuôn mẫu trả đũa tinh thần, hay phản ứng cảm xúc không hoàn toàn phù hợp với thực tế hiện tại. Bạn có thể mang theo nỗi lo bị bỏ rơi, ám ảnh về khả năng lặp lại sai lầm, hoặc thói quen che giấu cảm xúc để tự bảo vệ. Tuy nhiên The Moon cũng chỉ ra rằng trong bóng tối đó có trực giác mạnh mẽ chờ được khơi dậy; những ký ức và cảm xúc chưa kết thúc cần được soi sáng để trở thành bài học. Công việc của bạn là phân biệt giữa trực giác và ảo tưởng, khám phá nỗi sợ sâu kín bằng cách ghi nhật ký, trị liệu, hoặc đối thoại thẳng thắn với bản thân và đối phương. Khi bạn nhìn rõ nguồn gốc của những ám ảnh, bạn sẽ giảm sức nặng của chúng và để trực giác dẫn lối thay vì để nỗi sợ kiểm soát hành động, từ đó tạo điều kiện cho mối quan hệ mới minh bạch và trưởng thành hơn.",
+        "chua-lanh": "The Star kêu gọi bạn chữa lành bằng hy vọng, bằng việc kết nối lại với ước mơ và giá trị nội tại. Điều cần chữa lành có thể là niềm tin bị tổn thương, sự mất đi hy vọng sau biến cố, hoặc cảm giác không xứng đáng được yêu. Để yêu bền vững hơn, bạn cần học cách nuôi dưỡng niềm tin vào khả năng hồi phục, rèn luyện thói quen tự thương, và thiết lập thực hành tâm linh hay sáng tạo để nuôi dưỡng tâm hồn: thiền, viết nhật ký, nghệ thuật, hoặc dành thời gian dưới thiên nhiên. Hãy làm việc với các mục tiêu nhỏ, tập trung vào tiến trình chứ không chỉ kết quả, và tìm người đồng hành lành mạnh để chia sẻ hành trình chữa lành. Cụ thể, thực hành nói lời khẳng định hàng ngày, xác lập giới hạn rõ ràng trong các mối quan hệ, học kỹ năng giao tiếp không bạo lực và tìm đến hỗ trợ chuyên môn khi cần. The Star còn nhắc bạn về tầm quan trọng của lòng kiên nhẫn: chữa lành là một tiến trình dài, nhưng khi bạn nuôi dưỡng hy vọng và nhất quán trong hành động, bạn đồng thời khôi phục được nguồn sáng nội tại để có thể cho và nhận tình yêu một cách bền vững.",
+        "yeu-thuong-ban-than": "The Sun gửi thông điệp mạnh mẽ về việc trân trọng và yêu thương chính mình như nền tảng của mọi mối quan hệ lành mạnh. Yêu bản thân không chỉ là tự khen, mà là sống thật với giá trị, chăm sóc thân-tâm, và công nhận những thành tựu nhỏ trong hành trình tình cảm. Khi bạn rực rỡ như Mặt Trời, bạn thu hút sự ấm áp, tính chân thành và năng lượng tích cực từ người khác, đồng thời không phụ thuộc vào người kia để cảm thấy mình có giá trị. Hành động cụ thể để thực hiện điều này bao gồm ăn uống đủ, ngủ đủ, dành thời gian cho niềm vui riêng, thực hành lòng biết ơn, và liên tục thiết lập ranh giới tôn trọng bản thân. Hãy tập nhận ra tiếng nói nội tâm ủng hộ bạn và nuôi dưỡng nó, mừng chiến thắng cá nhân, và cho phép bản thân được vui vẻ, sáng tạo và biểu đạt. Thông điệp cuối cùng: khi bạn là nguồn sáng cho chính mình, yêu thương sẽ đến theo cách tự nhiên, chân thành và bền vững, vì bạn đến với mối quan hệ từ sự tròn đầy chứ không từ sự thiếu hụt."
+      }
+    }
+  }
