@@ -32,6 +32,15 @@ export class CreatePostDto {
   contentJson?: Record<string, any>;
 
   @ApiPropertyOptional({
+    description: 'URL ảnh đại diện/thumbnail của bài viết (được upload riêng qua field thumbnail)',
+    example: 'https://res.cloudinary.com/demo/image/upload/posts/thumbnail.jpg',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional({
     description: 'Nội dung plain text rút gọn từ editor (dùng preview/search)',
     example: 'Xin chào',
     type: String,

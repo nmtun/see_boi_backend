@@ -16,6 +16,7 @@ import { TuViModule } from './modules/tuvi/tuvi.module';
 import { GoogleGeminiModule } from './modules/gemini/google-gemini.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { PhysiognomyModule } from './modules/nhantuong/physiognomy.module';
+import { TrendingModule } from './modules/trending/trending.module';
 import { TarotModule } from './modules/tarot/tarot.module';
 import { OpenAIModule } from './modules/openai/openai.module';
 
@@ -24,7 +25,7 @@ import { OpenAIModule } from './modules/openai/openai.module';
     PrismaModule, 
     AuthModule, UserModule, PostModule, CommentModule, TagModule, CollectionModule, PollModule, BadgeModule, NotificationModule, ReportModule, TuViModule ,
     GoogleGeminiModule, PhysiognomyModule, TarotModule, OpenAIModule,
-    UploadModule
+    UploadModule, TrendingModule
   ],
   controllers: [], 
   providers: [], // Đã xóa NotificationGateway khỏi đây, chỉ khai báo trong NotificationModule
