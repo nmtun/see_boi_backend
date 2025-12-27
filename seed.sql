@@ -49,7 +49,17 @@ ON CONFLICT DO NOTHING;
 -- TAG
 --------------------------------------------------
 INSERT INTO "Tag" ("name")
-VALUES ('backend'),('frontend'),('database')
+VALUES 
+  ('Tarot'),
+  ('Tử Vi'),
+  ('Tướng Số'),
+  ('Phong Thủy'),
+  ('Chiêm Tinh'),
+  ('Nhân Tướng Học'),
+  ('Bói Bài'),
+  ('Thần Số Học'),
+  ('Cung Hoàng Đạo'),
+  ('Lá Số Tử Vi')
 ON CONFLICT DO NOTHING;
  
 --------------------------------------------------
@@ -58,16 +68,20 @@ ON CONFLICT DO NOTHING;
 INSERT INTO "PostTag" ("postId","tagId")
 VALUES
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
-  (SELECT id FROM "Tag" WHERE name='backend')
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
+  (SELECT id FROM "Tag" WHERE name='Tarot' LIMIT 1)
 ),
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
-  (SELECT id FROM "Tag" WHERE name='database')
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
+  (SELECT id FROM "Tag" WHERE name='Tử Vi' LIMIT 1)
 ),
 (
-  (SELECT id FROM "Post" WHERE title='Chia sẻ kinh nghiệm'),
-  (SELECT id FROM "Tag" WHERE name='frontend')
+  (SELECT id FROM "Post" WHERE title='Chia sẻ kinh nghiệm' LIMIT 1),
+  (SELECT id FROM "Tag" WHERE name='Tướng Số' LIMIT 1)
+),
+(
+  (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ' LIMIT 1),
+  (SELECT id FROM "Tag" WHERE name='Cung Hoàng Đạo' LIMIT 1)
 )
 ON CONFLICT DO NOTHING;
  
@@ -78,13 +92,13 @@ INSERT INTO "Comment"
 ("postId","userId","content","isAnonymous","createdAt")
 VALUES
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   (SELECT id FROM "User" WHERE email='b@gmail.com'),
   'Bài viết hay quá!',
   false,NOW()
 ),
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   (SELECT id FROM "User" WHERE email='c@gmail.com'),
   'Mình cũng thấy vậy',
   false,NOW()
@@ -94,7 +108,7 @@ INSERT INTO "Comment"
 ("postId","userId","parentId","content","isAnonymous","createdAt")
 VALUES
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   (SELECT id FROM "User" WHERE email='a@gmail.com'),
   (SELECT id FROM "Comment" WHERE content='Bài viết hay quá!' LIMIT 1),
   'Cảm ơn bạn nhé!',
@@ -129,17 +143,17 @@ ON CONFLICT DO NOTHING;
 INSERT INTO "PostLike" ("postId","userId","createdAt")
 VALUES
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   (SELECT id FROM "User" WHERE email='b@gmail.com'),
   NOW()
 ),
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   (SELECT id FROM "User" WHERE email='c@gmail.com'),
   NOW()
 ),
 (
-  (SELECT id FROM "Post" WHERE title='Chia sẻ kinh nghiệm'),
+  (SELECT id FROM "Post" WHERE title='Chia sẻ kinh nghiệm' LIMIT 1),
   (SELECT id FROM "User" WHERE email='a@gmail.com'),
   NOW()
 )
@@ -151,7 +165,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO "Poll" ("postId","expiresAt")
 VALUES
 (
-  (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ'),
+  (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ' LIMIT 1),
   NOW() + INTERVAL '7 days'
 )
 ON CONFLICT DO NOTHING;
@@ -163,17 +177,17 @@ INSERT INTO "PollOption" ("pollId","text")
 VALUES
 (
   (SELECT id FROM "Poll"
-   WHERE "postId" = (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ')),
+   WHERE "postId" = (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ' LIMIT 1) LIMIT 1),
   'JavaScript'
 ),
 (
   (SELECT id FROM "Poll"
-   WHERE "postId" = (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ')),
+   WHERE "postId" = (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ' LIMIT 1) LIMIT 1),
   'Python'
 ),
 (
   (SELECT id FROM "Poll"
-   WHERE "postId" = (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ')),
+   WHERE "postId" = (SELECT id FROM "Post" WHERE title='Khảo sát nhỏ' LIMIT 1) LIMIT 1),
   'Go'
 );
  
@@ -215,8 +229,8 @@ INSERT INTO "Bookmark" ("userId","postId","collectionId","createdAt")
 VALUES
 (
   (SELECT id FROM "User" WHERE email='a@gmail.com'),
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
-  (SELECT id FROM "Collection" WHERE name='Bài viết yêu thích'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
+  (SELECT id FROM "Collection" WHERE name='Bài viết yêu thích' LIMIT 1),
   NOW()
 )
 ON CONFLICT DO NOTHING;
@@ -260,14 +274,14 @@ VALUES
 (
   (SELECT id FROM "User" WHERE email='a@gmail.com'),
   'POST_LIKE',
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   'Bài viết của bạn vừa được thích',
   false,NOW()
 ),
 (
   (SELECT id FROM "User" WHERE email='a@gmail.com'),
   'POST_COMMENT',
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   'Có người bình luận bài viết của bạn',
   false,NOW()
 );
@@ -280,7 +294,7 @@ INSERT INTO "Report"
 VALUES
 (
   (SELECT id FROM "User" WHERE email='b@gmail.com'),
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   'Nội dung không phù hợp',
   'PENDING',
   NOW()
@@ -292,12 +306,12 @@ VALUES
 INSERT INTO "PostView" ("postId","userId","viewedAt")
 VALUES
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   (SELECT id FROM "User" WHERE email='a@gmail.com'),
   NOW()
 ),
 (
-  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên'),
+  (SELECT id FROM "Post" WHERE title='Bài viết đầu tiên' LIMIT 1),
   (SELECT id FROM "User" WHERE email='b@gmail.com'),
   NOW() + INTERVAL '1 second'
 );
