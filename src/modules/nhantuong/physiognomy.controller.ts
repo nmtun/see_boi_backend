@@ -157,9 +157,7 @@ export class PhysiognomyController {
               mieng_cam: 'Giải thích về miệng và hàm...'
             },
             loi_khuyen: ['Lời khuyên cụ thể 1', 'Lời khuyên cụ thể 2']
-          },
-          landmarks: {},
-          image_base64: 'base64_encoded_image_string'
+          }
         }
       }
     }
@@ -185,7 +183,7 @@ export class PhysiognomyController {
   @Post('save')
   @ApiOperation({ 
     summary: 'Lưu kết quả phân tích vào database',
-    description: 'Lưu toàn bộ dữ liệu phân tích khuôn mặt (bao gồm report, interpret nếu có, landmarks, và ảnh) vào database. Kết quả sẽ được lưu trong lịch sử phân tích của người dùng.'
+    description: 'Lưu toàn bộ dữ liệu phân tích khuôn mặt (bao gồm report, interpret nếu có, landmarks, và imageUrl) vào database. Kết quả sẽ được lưu trong lịch sử phân tích của người dùng.'
   })
   @ApiBody({ 
     type: SaveAnalysisDto,
@@ -198,10 +196,6 @@ export class PhysiognomyController {
       example: {
         success: true,
         data: {
-          report: {},
-          interpret: {},
-          landmarks: {},
-          image_base64: 'base64_encoded_image_string',
           saved_id: 1
         }
       }
@@ -225,6 +219,41 @@ export class PhysiognomyController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Get('history/me')
+  @ApiOperation({ 
+    summary: 'Lấy danh sách lịch sử phân tích của người dùng hiện tại',
+    description: 'Lấy danh sách tất cả các lần phân tích khuôn mặt đã lưu của người dùng đang request. Danh sách được sắp xếp theo thời gian mới nhất trước.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Lấy danh sách thành công',
+    schema: {
+      example: [
+        {
+          id: 1,
+          userId: 1,
+          name: 'Nguyễn Văn A',
+          dob: '2002-08-15T00:00:00.000Z',
+          gender: 'MALE',
+          report: {},
+          metrics: {},
+          landmarks: {},
+          tags: ['Thông minh', 'Sáng suốt'],
+          imageUrl: 'https://res.cloudinary.com/example/image/upload/v1234567890/face_analysis.jpg',
+          createdAt: '2024-01-01T00:00:00.000Z'
+        }
+      ]
+    }
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Chưa đăng nhập hoặc token không hợp lệ' 
+  })
+  async getMyHistory(@Req() req) {
+    return this.physiognomyService.getHistory(req.user.id);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('history')
   @ApiOperation({ 
     summary: 'Lấy danh sách lịch sử phân tích',
@@ -238,12 +267,15 @@ export class PhysiognomyController {
         {
           id: 1,
           userId: 1,
+          name: 'Nguyễn Văn A',
+          dob: '2002-08-15T00:00:00.000Z',
+          gender: 'MALE',
           report: {},
-          interpret: {},
+          metrics: {},
           landmarks: {},
-          image_base64: 'base64_string',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          updatedAt: '2024-01-01T00:00:00.000Z'
+          tags: ['Thông minh', 'Sáng suốt'],
+          imageUrl: 'https://res.cloudinary.com/example/image/upload/v1234567890/face_analysis.jpg',
+          createdAt: '2024-01-01T00:00:00.000Z'
         }
       ]
     }
@@ -275,23 +307,50 @@ export class PhysiognomyController {
       example: {
         id: 1,
         userId: 1,
+        name: 'Nguyễn Văn A',
+        dob: '2002-08-15T00:00:00.000Z',
+        gender: 'MALE',
         report: {
-          tam_dinh: [],
-          long_may: [],
-          mat: [],
-          mui: [],
-          tai: [],
-          mieng_cam: []
+          tam_dinh: [
+            { trait: 'Trán rộng', tags: ['Thông minh', 'Sáng suốt'] }
+          ],
+          long_may: [
+            { trait: 'Lông mày thanh tú', tags: ['Tình cảm tốt'] }
+          ],
+          mat: [
+            { trait: 'Mắt sáng', tags: ['Tinh tường'] }
+          ],
+          mui: [
+            { trait: 'Mũi cao', tags: ['Tài vận tốt'] }
+          ],
+          tai: [
+            { trait: 'Tai dày', tags: ['Thọ mệnh'] }
+          ],
+          mieng_cam: [
+            { trait: 'Miệng đẹp', tags: ['Giao tiếp tốt'] }
+          ]
         },
         interpret: {
-          tam_dinh: {},
-          ngu_quan: {},
-          loi_khuyen: []
+          'tong-quan': 'Luận giải tổng quan mệnh cục...',
+          tam_dinh: {
+            thuong_dinh: 'Giải thích về thượng đình...',
+            trung_dinh: 'Giải thích về trung đình...',
+            ha_dinh: 'Giải thích về hạ đình...',
+            tong_quan: 'Tổng quan về tam đình...'
+          },
+          ngu_quan: {
+            long_may: 'Giải thích về lông mày...',
+            mat: 'Giải thích về mắt...',
+            mui: 'Giải thích về mũi...',
+            tai: 'Giải thích về tai...',
+            mieng_cam: 'Giải thích về miệng và hàm...'
+          },
+          loi_khuyen: ['Lời khuyên 1', 'Lời khuyên 2']
         },
         landmarks: {},
-        image_base64: 'base64_encoded_image_string',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        updatedAt: '2024-01-01T00:00:00.000Z'
+        tags: ['Thông minh', 'Sáng suốt', 'Tình cảm tốt'],
+        imageUrl: 'https://res.cloudinary.com/example/image/upload/v1234567890/face_analysis.jpg',
+        createdAt: '2024-01-01T00:00:00.000Z'
       }
     }
   })

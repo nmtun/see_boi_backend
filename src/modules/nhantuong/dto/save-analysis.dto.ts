@@ -102,11 +102,13 @@ class AnalysisDataDto {
   landmarks: any;
 
   @ApiProperty({
-    description: 'Ảnh khuôn mặt đã được xử lý (base64)',
-    example: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...',
+    description: 'URL ảnh đã upload lên Cloudinary hoặc storage (tùy chọn)',
+    example: 'https://res.cloudinary.com/example/image/upload/v1234567890/face_analysis.jpg',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  image_base64: string;
+  imageUrl?: string;
 }
 
 export class SaveAnalysisDto {

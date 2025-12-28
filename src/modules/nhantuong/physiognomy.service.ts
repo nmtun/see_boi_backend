@@ -54,7 +54,7 @@ export class PhysiognomyService {
   ): Promise<any> {
     if (!dto || !dto.data) throw new BadRequestException('Dữ liệu không hợp lệ');
 
-    const { name, birthday, gender, report, interpret, landmarks } = dto.data;
+    const { name, birthday, gender, report, interpret, landmarks, imageUrl } = dto.data;
     const tags = this.extractTags(report);
     const record = await this.prisma.userFaceLandmarks.create({
       data: {
@@ -66,6 +66,7 @@ export class PhysiognomyService {
         name: name || '',
         dob: birthday ? new Date(birthday) : new Date(),
         gender: gender || '',
+        imageUrl: imageUrl || null,
       },
     });
 
@@ -86,7 +87,13 @@ export class PhysiognomyService {
       where: { id, userId },
     });
     if (!record) throw new BadRequestException('Không tìm thấy bản ghi');
-    return record;
+    
+    // Map metrics thành interpret để match với response format
+    const { metrics, ...rest } = record;
+    return {
+      ...rest,
+      interpret: metrics || {},
+    };
   }
 
   private async callPythonService(file: Express.Multer.File): Promise<PythonApiResponse> {
@@ -128,6 +135,7 @@ export class PhysiognomyService {
       ${JSON.stringify(context)}
       YÊU CẦU:
       - JSON duy nhất, Tiếng Việt.
+      - QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG bao gồm markdown code blocks. Chỉ trả về nội dung JSON thuần túy, không có dấu backtick hoặc markdown syntax.
       - Cấu trúc: {
           "interpret": {
             "tong-quan": "Luận giải tổng quan mệnh cục dựa trên thông tin cá nhân (tên, ngày sinh, giới tính). Đây là phần tổng hợp toàn diện về vận mệnh, tính cách, và triển vọng cuộc đời của người được phân tích.(Phần này chỉ sử dụng kiến thức về Tử vi, chưa sử dụng đến kiến thức nhân tướng học)",
