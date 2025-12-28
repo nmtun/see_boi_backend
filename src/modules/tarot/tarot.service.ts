@@ -89,6 +89,7 @@ Thông tin người xem:
 
 YÊU CẦU:
 - Trả về JSON duy nhất, Tiếng Việt
+- QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG bao gồm markdown code blocks. Chỉ trả về nội dung JSON thuần túy, không có dấu backtick hoặc markdown syntax.
 - Cấu trúc JSON:
 {
   "reading": {
@@ -173,6 +174,7 @@ Tình huống:
 
 YÊU CẦU QUAN TRỌNG:
 - Trả về JSON duy nhất, Tiếng Việt
+- QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG bao gồm markdown code blocks. Chỉ trả về nội dung JSON thuần túy, không có dấu backtick hoặc markdown syntax.
 - Cấu trúc JSON:
 {
   "answer": {
@@ -254,6 +256,7 @@ Lá bài tarot: ${cardName}
 
 YÊU CẦU:
 - Trả về JSON duy nhất, Tiếng Việt
+- QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG bao gồm markdown code blocks. Chỉ trả về nội dung JSON thuần túy, không có dấu backtick hoặc markdown syntax.
 - Cấu trúc JSON:
 {
   "reading": {
@@ -340,6 +343,7 @@ Câu hỏi của người xem: "${question}"
 
 YÊU CẦU:
 - Trả về JSON duy nhất, Tiếng Việt
+- QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG bao gồm markdown code blocks. Chỉ trả về nội dung JSON thuần túy, không có dấu backtick hoặc markdown syntax.
 - Cấu trúc JSON:
 {
   "reading": {
@@ -437,6 +441,7 @@ Câu hỏi của người xem: "${question}"
 
 YÊU CẦU:
 - Trả về JSON duy nhất, Tiếng Việt
+- QUAN TRỌNG: Trả về JSON thuần túy, KHÔNG bao gồm markdown code blocks. Chỉ trả về nội dung JSON thuần túy, không có dấu backtick hoặc markdown syntax.
 - Cấu trúc JSON:
 {
   "reading": {

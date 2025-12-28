@@ -465,6 +465,7 @@ model UserFaceLandmarks {
   report    Json
   landmarks Json
   tags      String[]
+  imageUrl  String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
 
