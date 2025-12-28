@@ -50,4 +50,117 @@ export class TagService {
     });
   }
 
+  //////////////////////////////////////////////////
+  // TAG FOLLOW SYSTEM
+  //////////////////////////////////////////////////
+
+  // Follow a tag
+  async followTag(userId: number, tagId: number) {
+    // Check if tag exists
+    const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
+    if (!tag) throw new NotFoundException('Tag not found');
+
+    // Check if already following
+    const existingFollow = await this.prisma.tagFollow.findUnique({
+      where: {
+        userId_tagId: { userId, tagId },
+      },
+    });
+
+    if (existingFollow) {
+      throw new ForbiddenException('Already following this tag');
+    }
+
+    return this.prisma.tagFollow.create({
+      data: { userId, tagId },
+      include: {
+        tag: true,
+      },
+    });
+  }
+
+  // Unfollow a tag
+  async unfollowTag(userId: number, tagId: number) {
+    const tagFollow = await this.prisma.tagFollow.findUnique({
+      where: {
+        userId_tagId: { userId, tagId },
+      },
+    });
+
+    if (!tagFollow) {
+      throw new NotFoundException('Not following this tag');
+    }
+
+    return this.prisma.tagFollow.delete({
+      where: {
+        userId_tagId: { userId, tagId },
+      },
+    });
+  }
+
+  // Check if user is following a tag
+  async isFollowingTag(userId: number, tagId: number): Promise<boolean> {
+    const tagFollow = await this.prisma.tagFollow.findUnique({
+      where: {
+        userId_tagId: { userId, tagId },
+      },
+    });
+
+    return !!tagFollow;
+  }
+
+  // Get all tags that a user is following
+  async getUserFollowingTags(userId: number) {
+    const tagFollows = await this.prisma.tagFollow.findMany({
+      where: { userId },
+      include: {
+        tag: {
+          include: {
+            _count: {
+              select: {
+                posts: true,
+                followers: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return tagFollows.map((tf) => ({
+      ...tf.tag,
+      followedAt: tf.createdAt,
+    }));
+  }
+
+  // Get tag details with follow status (for logged-in users)
+  async getTagWithFollowStatus(tagId: number, viewerId?: number) {
+    const tag = await this.prisma.tag.findUnique({
+      where: { id: tagId },
+      include: {
+        _count: {
+          select: {
+            posts: true,
+            followers: true,
+          },
+        },
+      },
+    });
+
+    if (!tag) throw new NotFoundException('Tag not found');
+
+    let isFollowing = false;
+    if (viewerId) {
+      isFollowing = await this.isFollowingTag(viewerId, tagId);
+    }
+
+    return {
+      ...tag,
+      isFollowing,
+    };
+  }
+
 }

@@ -292,6 +292,17 @@ export class CommentService {
         if (type === 'UP') {
           // Đổi từ downvote sang upvote: +3 (upvote) + 2 (hoàn lại downvote) = +5
           await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', 5);
+          
+          // Tạo notification cho upvote
+          const notification = await this.prisma.notification.create({
+            data: {
+              userId: comment.userId,
+              type: 'COMMENT_LIKE',
+              content: 'Có người thích bình luận của bạn',
+              refId: comment.postId,
+            },
+          });
+          this.notificationGateway.sendLike(comment.userId, notification);
         } else {
           // Đổi từ upvote sang downvote: -3 (mất upvote) - 2 (downvote) = -5
           await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', -5);
@@ -301,6 +312,17 @@ export class CommentService {
         if (type === 'UP') {
           // Upvote: +3 điểm
           await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', 3);
+          
+          // Tạo notification cho upvote mới
+          const notification = await this.prisma.notification.create({
+            data: {
+              userId: comment.userId,
+              type: 'COMMENT_LIKE',
+              content: 'Có người thích bình luận của bạn',
+              refId: comment.postId,
+            },
+          });
+          this.notificationGateway.sendLike(comment.userId, notification);
         } else {
           // Downvote: -2 điểm
           await this.userService.addXP(comment.userId, 'LIKE_RECEIVED', -2);
