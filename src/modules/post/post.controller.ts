@@ -19,6 +19,7 @@ import { PostService } from './post.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { AddImagesToPostDto } from './dto/add-images-to-post.dto';
 import { Posts } from './entities/post.entity';
 import { RolesGuard } from '../../auth/guard/roles.guard';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
@@ -112,9 +113,29 @@ export class PostController {
       isDraft: body.isDraft === 'true' || body.isDraft === true,
       type: body.type,
       tagIds: body.tagIds
-        ? Array.isArray(body.tagIds)
-          ? body.tagIds.map(Number)
-          : JSON.parse(body.tagIds)
+        ? (() => {
+            // Nếu đã là array, map to Number
+            if (Array.isArray(body.tagIds)) {
+              return body.tagIds.map(Number);
+            }
+            // Nếu là string, thử parse JSON
+            if (typeof body.tagIds === 'string') {
+              try {
+                const parsed = JSON.parse(body.tagIds);
+                // Nếu parse ra là array, map to Number
+                if (Array.isArray(parsed)) {
+                  return parsed.map(Number);
+                }
+                // Nếu parse ra là number, chuyển thành array
+                return [Number(parsed)];
+              } catch {
+                // Nếu parse lỗi, coi như là một số đơn
+                return [Number(body.tagIds)];
+              }
+            }
+            // Nếu là number, chuyển thành array
+            return [Number(body.tagIds)];
+          })()
         : undefined,
       contentJson: body.contentJson
         ? typeof body.contentJson === 'string'
@@ -667,5 +688,74 @@ export class PostController {
   ) {
     const limitNum = limit ? parseInt(limit) : 20;
     return this.postService.getViewDetails(+id, limitNum);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Post(':id/images')
+  @ApiOperation({
+    summary: 'Đồng bộ danh sách ảnh của post',
+    description:
+      'Đồng bộ danh sách ảnh của post với danh sách URL được gửi lên. Những URL đã có sẽ được bỏ qua, URL mới sẽ được thêm vào, và những URL không còn trong danh sách sẽ bị xóa. Chỉ tác giả của post mới có quyền cập nhật.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiBody({ type: AddImagesToPostDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Thêm ảnh thành công',
+  })
+  @ApiResponse({ status: 403, description: 'Không có quyền thêm ảnh' })
+  @ApiResponse({ status: 404, description: 'Post không tồn tại' })
+  async addImagesToPost(
+    @Param('id') id: string,
+    @Body() dto: AddImagesToPostDto,
+    @Req() req,
+  ) {
+    // Kiểm tra userId từ token có khớp với userId trong body không
+    if (req.user.id !== dto.userId) {
+      throw new BadRequestException(
+        'UserId không khớp với user đang đăng nhập',
+      );
+    }
+
+    // Kiểm tra postId trong param có khớp với postId trong body không
+    if (+id !== dto.postId) {
+      throw new BadRequestException(
+        'PostId trong URL không khớp với postId trong body',
+      );
+    }
+
+    const post = await this.postService.addImagesToPost(
+      dto.postId,
+      dto.userId,
+      dto.imageUrls,
+    );
+    return new Posts(post);
+  }
+
+  @Get(':id/images')
+  @ApiOperation({
+    summary: 'Lấy danh sách ảnh của bài viết',
+    description: 'Lấy mảng danh sách các link ảnh của một bài viết theo ID',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiResponse({
+    status: 200,
+    description: 'Mảng danh sách các link ảnh',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'string',
+        example: 'https://res.cloudinary.com/demo/image/upload/v123/image.jpg',
+      },
+      example: [
+        'https://res.cloudinary.com/demo/image/upload/v123/image1.jpg',
+        'https://res.cloudinary.com/demo/image/upload/v123/image2.jpg',
+      ],
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Post không tồn tại' })
+  async getPostImages(@Param('id') id: string) {
+    const imageUrls = await this.postService.getPostImages(+id);
+    return imageUrls;
   }
 }

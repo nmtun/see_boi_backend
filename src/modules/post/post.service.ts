@@ -52,6 +52,10 @@ export class PostService {
     let tagIds = dto.tagIds;
     // loại bỏ tag trùng
     if (tagIds) {
+      // Đảm bảo tagIds là array trước khi dùng Set
+      if (!Array.isArray(tagIds)) {
+        tagIds = [tagIds];
+      }
       tagIds = Array.from(new Set(tagIds));
     }
 
@@ -1049,6 +1053,128 @@ export class PostService {
       user: view.user,
       viewedAt: view.viewedAt,
     }));
+  }
+
+  // Đồng bộ danh sách ảnh của post
+  async addImagesToPost(
+    postId: number,
+    userId: number,
+    imageUrls: string[],
+  ) {
+    // Kiểm tra post có tồn tại không
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post không tồn tại');
+    }
+
+    // Kiểm tra quyền: chỉ tác giả post mới được cập nhật ảnh
+    if (post.userId !== userId) {
+      throw new ForbiddenException(
+        'Bạn không có quyền cập nhật ảnh của post này',
+      );
+    }
+
+    // Lấy danh sách ảnh hiện tại của post
+    const existingImages = await this.prisma.image.findMany({
+      where: {
+        postId: postId,
+        type: 'POST',
+      },
+      select: {
+        id: true,
+        url: true,
+      },
+    });
+
+    // Tạo Set từ URL hiện tại và URL mới để so sánh
+    const existingUrls = new Set(existingImages.map((img) => img.url));
+    const newUrls = new Set(imageUrls);
+
+    // Tìm những URL cần thêm (có trong mới nhưng không có trong cũ)
+    const urlsToAdd = imageUrls.filter((url) => !existingUrls.has(url));
+
+    // Tìm những URL cần xóa (có trong cũ nhưng không có trong mới)
+    const urlsToDelete = existingImages
+      .filter((img) => !newUrls.has(img.url))
+      .map((img) => img.id);
+
+    // Thêm những URL mới (bỏ qua những URL đã có)
+    if (urlsToAdd.length > 0) {
+      await this.prisma.image.createMany({
+        data: urlsToAdd.map((url) => ({
+          url,
+          type: 'POST',
+          entityId: postId,
+          postId: postId,
+          userId: userId,
+        })),
+      });
+    }
+
+    // Xóa những URL không còn trong danh sách mới
+    if (urlsToDelete.length > 0) {
+      await this.prisma.image.deleteMany({
+        where: {
+          id: {
+            in: urlsToDelete,
+          },
+        },
+      });
+    }
+
+    // Lấy lại post với danh sách ảnh đã cập nhật
+    const postWithImages = await this.prisma.post.findUnique({
+      where: { id: postId },
+      include: {
+        images: true,
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    // Đảm bảo post tồn tại (đã kiểm tra ở trên nên không bao giờ null)
+    if (!postWithImages) {
+      throw new NotFoundException('Post không tồn tại');
+    }
+
+    return postWithImages;
+  }
+
+  // Lấy danh sách ảnh của một post
+  async getPostImages(postId: number): Promise<string[]> {
+    // Kiểm tra post có tồn tại không
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post không tồn tại');
+    }
+
+    // Lấy danh sách ảnh của post và chỉ trả về mảng các URL
+    const images = await this.prisma.image.findMany({
+      where: {
+        postId: postId,
+        type: 'POST',
+      },
+      select: {
+        url: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    // Chỉ trả về mảng các link ảnh
+    return images.map((image) => image.url);
   }
 
   // Helper method to extract publicId from Cloudinary URL
