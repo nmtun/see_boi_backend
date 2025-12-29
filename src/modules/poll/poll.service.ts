@@ -22,7 +22,7 @@ export class PollService {
     const option = poll.options.find(o => o.id === dto.optionId);
     if (!option) throw new BadRequestException('Invalid option');
 
-    // Không cho vote nhiều option trong cùng poll
+    // Kiểm tra xem user đã vote chưa
     const existingVote = await this.prisma.pollVote.findFirst({
       where: {
         userId,
@@ -32,16 +32,44 @@ export class PollService {
       },
     });
 
+    // Nếu đã vote:
+    // - Nếu vote lại cùng option → Bỏ vote (unvote)
+    // - Nếu vote option khác → Đổi lựa chọn (update)
     if (existingVote) {
-      throw new BadRequestException('You already voted in this poll');
+      if (existingVote.pollOptionId === dto.optionId) {
+        // Click lại option đang chọn → Bỏ chọn
+        await this.prisma.pollVote.delete({
+          where: { 
+            pollOptionId_userId: {
+              pollOptionId: existingVote.pollOptionId,
+              userId: userId,
+            },
+          },
+        });
+        return { message: 'Vote removed', action: 'unvote' };
+      } else {
+        // Vote option khác → Đổi lựa chọn
+        const updated = await this.prisma.pollVote.update({
+          where: { 
+            pollOptionId_userId: {
+              pollOptionId: existingVote.pollOptionId,
+              userId: userId,
+            },
+          },
+          data: { pollOptionId: dto.optionId },
+        });
+        return { ...updated, action: 'change' };
+      }
     }
 
-    return this.prisma.pollVote.create({
+    // Vote lần đầu
+    const newVote = await this.prisma.pollVote.create({
       data: {
         pollOptionId: dto.optionId,
         userId,
       },
     });
+    return { ...newVote, action: 'vote' };
   }
 
   async getResult(pollId: number) {
@@ -78,6 +106,35 @@ export class PollService {
             : Math.round((o._count.votes / totalVotes) * 100),
       })),
     };
+  }
+
+  /**
+   * Bỏ vote trong poll
+   */
+  async unvote(pollId: number, userId: number) {
+    const existingVote = await this.prisma.pollVote.findFirst({
+      where: {
+        userId,
+        option: {
+          pollId,
+        },
+      },
+    });
+
+    if (!existingVote) {
+      throw new BadRequestException('You have not voted in this poll');
+    }
+
+    await this.prisma.pollVote.delete({
+      where: { 
+        pollOptionId_userId: {
+          pollOptionId: existingVote.pollOptionId,
+          userId: userId,
+        },
+      },
+    });
+
+    return { message: 'Vote removed successfully' };
   }
 
   /**
