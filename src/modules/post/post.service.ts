@@ -18,6 +18,7 @@ import {
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
 import { UserService } from '../user/user.service';
+import { getDefaultPollThumbnail } from 'src/utils/poll-thumbnails';
 
 @Injectable()
 export class PostService {
@@ -38,6 +39,65 @@ export class PostService {
         `contentJson quá lớn (${size} bytes). Giới hạn: ${maxBytes} bytes.`,
       );
     }
+  }
+
+  /**
+   * Kiểm tra xem viewer có quyền xem post này không
+   */
+  private async canViewPost(
+    post: {
+      visibility: PostVisibility;
+      userId: number;
+    },
+    viewerId?: number,
+  ): Promise<boolean> {
+    // PUBLIC và ANONYMOUS: ai cũng xem được
+    if (
+      post.visibility === PostVisibility.PUBLIC ||
+      post.visibility === PostVisibility.ANONYMOUS
+    ) {
+      return true;
+    }
+
+    // Chưa đăng nhập: không xem được PRIVATE và FOLLOWERS
+    if (!viewerId) {
+      return false;
+    }
+
+    // Chủ post: luôn xem được post của mình
+    if (post.userId === viewerId) {
+      return true;
+    }
+
+    // PRIVATE: chỉ chủ post xem được
+    if (post.visibility === PostVisibility.PRIVATE) {
+      return false;
+    }
+
+    // FOLLOWERS: chỉ followers xem được
+    if (post.visibility === PostVisibility.FOLLOWERS) {
+      return this.isFollowing(viewerId, post.userId);
+    }
+
+    return false;
+  }
+
+  /**
+   * Kiểm tra xem followerId có đang follow followingId không
+   */
+  private async isFollowing(
+    followerId: number,
+    followingId: number,
+  ): Promise<boolean> {
+    const follow = await this.prisma.userFollow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+    });
+    return !!follow;
   }
 
   // tạo bài viết
@@ -77,6 +137,11 @@ export class PostService {
         (thumbnailFile as any).path ||
         (thumbnailFile as any).url ||
         (thumbnailFile as any).secure_url;
+    }
+
+    // Auto-assign default thumbnail for POLL type if no thumbnail uploaded
+    if (!thumbnailUrl && dto.type === 'POLL') {
+      thumbnailUrl = getDefaultPollThumbnail();
     }
 
     // Get image URLs from CloudinaryStorage for content images
@@ -186,7 +251,10 @@ export class PostService {
 
   // cập nhật bài viết
   async update(postId: number, userId: number, dto: UpdatePostDto) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId } });
+    const post = await this.prisma.post.findUnique({ 
+      where: { id: postId },
+      include: { poll: { include: { options: true } } }
+    });
     if (!post) throw new NotFoundException();
     if (post.userId !== userId) throw new ForbiddenException();
 
@@ -220,7 +288,8 @@ export class PostService {
 
     const normalizedTagIds = tagIds ? Array.from(new Set(tagIds)) : undefined;
 
-    return this.prisma.post.update({
+    // Update post
+    await this.prisma.post.update({
       where: { id: postId },
       data: {
         ...rest,
@@ -239,14 +308,89 @@ export class PostService {
           : undefined,
       },
     });
+
+    // Update poll nếu có
+    if (poll && post.poll) {
+      const pollId = post.poll.id;
+      
+      // Post đã có poll, update options
+      if (poll.options && poll.options.length >= 2) {
+        // Bước 1: Xóa tất cả votes của poll trước (vì votes reference đến options)
+        await this.prisma.pollVote.deleteMany({
+          where: {
+            option: {
+              pollId,
+            },
+          },
+        });
+
+        // Bước 2: Xóa tất cả options cũ
+        await this.prisma.pollOption.deleteMany({
+          where: { pollId },
+        });
+
+        // Bước 3: Tạo options mới
+        await this.prisma.pollOption.createMany({
+          data: poll.options.map((text) => ({
+            pollId,
+            text,
+          })),
+        });
+
+        // Update expiresAt nếu có
+        if (poll.expiresAt !== undefined) {
+          await this.prisma.poll.update({
+            where: { id: pollId },
+            data: { expiresAt: poll.expiresAt },
+          });
+        }
+      }
+    } else if (poll && !post.poll && dto.type === 'POLL') {
+      // Post chưa có poll nhưng được chuyển sang type POLL
+      await this.createPoll(postId, userId, poll);
+    }
+
+    // Fetch lại post với poll mới
+    return this.prisma.post.findUnique({
+      where: { id: postId },
+      include: {
+        tags: { include: { tag: true } },
+        poll: { include: { options: true } },
+      },
+    });
   }
 
-  async findAll() {
+  async findAll(viewerId?: number) {
+    // Tạo điều kiện where dựa trên viewerId
+    const whereClause: any = {
+      status: PostStatus.VISIBLE,
+      isDraft: false,
+    };
+
+    if (!viewerId) {
+      // Chưa đăng nhập: chỉ xem PUBLIC và ANONYMOUS
+      whereClause.visibility = {
+        in: [PostVisibility.PUBLIC, PostVisibility.ANONYMOUS],
+      };
+    } else {
+      // Đã đăng nhập: xem PUBLIC, ANONYMOUS, posts của mình, và FOLLOWERS (nếu đang follow)
+      whereClause.OR = [
+        { visibility: PostVisibility.PUBLIC },
+        { visibility: PostVisibility.ANONYMOUS },
+        { userId: viewerId }, // Posts của mình (bao gồm cả PRIVATE)
+        {
+          visibility: PostVisibility.FOLLOWERS,
+          user: {
+            followsFrom: {
+              some: { followerId: viewerId },
+            },
+          },
+        },
+      ];
+    }
+
     return this.prisma.post.findMany({
-      where: {
-        status: PostStatus.VISIBLE,
-        isDraft: false,
-      },
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       include: {
         user: {
@@ -263,6 +407,182 @@ export class PostService {
         poll: { include: { options: true } },
       },
     });
+  }
+
+  //////////////////////////////////////////////////
+  // FILTER POSTS BY TAGS WITH SORTING
+  //////////////////////////////////////////////////
+
+  async getPostsByTags(
+    tagIds: number[],
+    sortBy: 'recent' | 'likes' | 'views' = 'recent',
+    skip: number = 0,
+    take: number = 20,
+    viewerId?: number,
+  ) {
+    // Tạo điều kiện where cho visibility
+    const whereClause: any = {
+      status: PostStatus.VISIBLE,
+      isDraft: false,
+      tags: {
+        some: {
+          tagId: {
+            in: tagIds,
+          },
+        },
+      },
+    };
+
+    if (!viewerId) {
+      // Chưa đăng nhập: chỉ xem PUBLIC và ANONYMOUS
+      whereClause.visibility = {
+        in: [PostVisibility.PUBLIC, PostVisibility.ANONYMOUS],
+      };
+    } else {
+      // Đã đăng nhập: xem PUBLIC, ANONYMOUS, posts của mình, và FOLLOWERS (nếu đang follow)
+      whereClause.OR = [
+        { visibility: PostVisibility.PUBLIC },
+        { visibility: PostVisibility.ANONYMOUS },
+        { userId: viewerId },
+        {
+          visibility: PostVisibility.FOLLOWERS,
+          user: {
+            followsFrom: {
+              some: { followerId: viewerId },
+            },
+          },
+        },
+      ];
+    }
+
+    // Xác định cách sắp xếp
+    let orderBy: any = { createdAt: 'desc' }; // default: recent
+    if (sortBy === 'likes') {
+      orderBy = { likes: { _count: 'desc' } };
+    } else if (sortBy === 'views') {
+      orderBy = { views: { _count: 'desc' } };
+    }
+
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where: whereClause,
+        orderBy,
+        skip,
+        take,
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+            },
+          },
+          likes: true,
+          comments: true,
+          bookmarks: true,
+          tags: { include: { tag: true } },
+          poll: { include: { options: true } },
+          _count: {
+            select: {
+              likes: true,
+              views: true,
+              comments: true,
+            },
+          },
+        },
+      }),
+      this.prisma.post.count({ where: whereClause }),
+    ]);
+
+    return {
+      posts,
+      total,
+      skip,
+      take,
+      hasMore: skip + take < total,
+    };
+  }
+
+  //////////////////////////////////////////////////
+  // GET POSTS FROM FOLLOWING USERS (FEED)
+  //////////////////////////////////////////////////
+
+  async getFollowingFeed(
+    userId: number,
+    skip: number = 0,
+    take: number = 20,
+  ) {
+    // Lấy danh sách users mà userId đang follow
+    const following = await this.prisma.userFollow.findMany({
+      where: { followerId: userId },
+      select: { followingId: true },
+    });
+
+    const followingIds = following.map((f) => f.followingId);
+
+    // Nếu không follow ai, trả về empty
+    if (followingIds.length === 0) {
+      return {
+        posts: [],
+        total: 0,
+        skip,
+        take,
+        hasMore: false,
+      };
+    }
+
+    // Lấy posts từ những người đang follow
+    const whereClause: any = {
+      userId: { in: followingIds },
+      status: PostStatus.VISIBLE,
+      isDraft: false,
+      visibility: {
+        in: [
+          PostVisibility.PUBLIC,
+          PostVisibility.FOLLOWERS,
+          PostVisibility.ANONYMOUS,
+        ],
+      },
+    };
+
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+            },
+          },
+          likes: true,
+          comments: true,
+          bookmarks: true,
+          tags: { include: { tag: true } },
+          poll: { include: { options: true } },
+          _count: {
+            select: {
+              likes: true,
+              views: true,
+              comments: true,
+            },
+          },
+        },
+      }),
+      this.prisma.post.count({ where: whereClause }),
+    ]);
+
+    return {
+      posts,
+      total,
+      skip,
+      take,
+      hasMore: skip + take < total,
+    };
   }
 
   async findById(postId: number, viewerId?: number) {
@@ -283,8 +603,18 @@ export class PostService {
         poll: { include: { options: true } },
       },
     });
-    if (!post || post.status !== PostStatus.VISIBLE || post.isDraft)
+    
+    if (!post || post.status !== PostStatus.VISIBLE || post.isDraft) {
       throw new NotFoundException('Post not found or not visible');
+    }
+
+    // Kiểm tra quyền xem post
+    const canView = await this.canViewPost(post, viewerId);
+    if (!canView) {
+      throw new ForbiddenException(
+        'You do not have permission to view this post',
+      );
+    }
 
     // log view
     await this.prisma.postView.create({
@@ -371,50 +701,16 @@ export class PostService {
     }
 
     // Delete related records first (to avoid foreign key constraint errors)
+    // Note: onDelete: Cascade đã được thiết lập trong schema nên không cần xóa thủ công
+    // nhưng vẫn giữ lại để đảm bảo xóa Notification (không có cascade)
     await this.prisma.$transaction([
-      // Delete post views
-      this.prisma.postView.deleteMany({
-        where: { postId },
-      }),
-      // Delete bookmarks
-      this.prisma.bookmark.deleteMany({
-        where: { postId },
-      }),
-      // Delete post likes
-      this.prisma.postLike.deleteMany({
-        where: { postId },
-      }),
       // Delete notifications related to this post
       this.prisma.notification.deleteMany({
         where: { refId: postId, type: { in: ['POST_LIKE', 'POST_COMMENT'] } },
       }),
-      // Delete images
-      this.prisma.image.deleteMany({
-        where: { postId },
-      }),
-      // Delete comments and their votes (cascade should handle this, but to be safe)
-      this.prisma.commentVote.deleteMany({
-        where: { comment: { postId } },
-      }),
-      this.prisma.comment.deleteMany({
-        where: { postId },
-      }),
-      // Delete poll votes and options if exists
-      this.prisma.pollOption.deleteMany({
-        where: { poll: { postId } },
-      }),
-      this.prisma.poll.deleteMany({
-        where: { postId },
-      }),
-      // Delete post tags
-      this.prisma.postTag.deleteMany({
-        where: { postId },
-      }),
-      // Delete post edit history
-      this.prisma.postEditHistory.deleteMany({
-        where: { postId },
-      }),
-      // Finally delete the post
+      // Finally delete the post - cascade sẽ tự động xóa các bảng liên quan:
+      // PostLike, PostTag, PostEditHistory, Comment, CommentVote, Poll, PollOption, PollVote,
+      // Bookmark, PostView, Image, Report
       this.prisma.post.delete({
         where: { id: postId },
       }),
@@ -949,10 +1245,51 @@ export class PostService {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException();
     if (post.userId !== userId) throw new ForbiddenException();
-    return this.prisma.post.update({
+    
+    // Nếu đang publish draft (từ isDraft: true -> false)
+    const isPublishing = post.isDraft && !isDraft;
+    
+    const updatedPost = await this.prisma.post.update({
       where: { id: postId },
-      data: { isDraft },
+      data: {
+        isDraft,
+        // Cập nhật createdAt thành thời điểm publish nếu đang publish draft
+        ...(isPublishing && { createdAt: new Date() }),
+      },
     });
+
+    // Gửi thông báo đến followers khi publish draft
+    if (isPublishing) {
+      const followers = await this.prisma.userFollow.findMany({
+        where: { followingId: userId },
+        select: { followerId: true },
+      });
+
+      const notifications = await Promise.all(
+        followers.map((follower) =>
+          this.prisma.notification.create({
+            data: {
+              userId: follower.followerId,
+              type: 'NEW_POST',
+              content: 'Người bạn theo dõi vừa đăng bài viết mới',
+              refId: post.id,
+            },
+          }),
+        ),
+      );
+
+      for (const notification of notifications) {
+        this.notificationGateway.sendNotification(
+          notification.userId,
+          notification,
+        );
+      }
+
+      // Cộng 100 điểm cho user khi publish draft
+      await this.userService.addXP(userId, 'POST', 100);
+    }
+
+    return updatedPost;
   }
 
   // update visibility
@@ -971,13 +1308,43 @@ export class PostService {
   }
 
   // lấy bài viết của 1 users khi xem profile
-  async getPostsByUser(userId: number) {
+  async getPostsByUser(userId: number, viewerId?: number) {
+    // Tạo điều kiện where dựa trên viewerId
+    const whereClause: any = {
+      userId,
+      status: PostStatus.VISIBLE,
+      isDraft: false,
+    };
+
+    if (!viewerId || viewerId !== userId) {
+      // Không phải chủ profile hoặc chưa đăng nhập
+      if (!viewerId) {
+        // Chưa đăng nhập: chỉ xem PUBLIC và ANONYMOUS
+        whereClause.visibility = {
+          in: [PostVisibility.PUBLIC, PostVisibility.ANONYMOUS],
+        };
+      } else {
+        // Đã đăng nhập nhưng không phải chủ: xem PUBLIC, ANONYMOUS, và FOLLOWERS (nếu đang follow)
+        const isFollower = await this.isFollowing(viewerId, userId);
+        if (isFollower) {
+          whereClause.visibility = {
+            in: [
+              PostVisibility.PUBLIC,
+              PostVisibility.ANONYMOUS,
+              PostVisibility.FOLLOWERS,
+            ],
+          };
+        } else {
+          whereClause.visibility = {
+            in: [PostVisibility.PUBLIC, PostVisibility.ANONYMOUS],
+          };
+        }
+      }
+    }
+    // Nếu viewerId === userId: xem tất cả posts (không thêm điều kiện visibility)
+
     return this.prisma.post.findMany({
-      where: {
-        userId,
-        status: PostStatus.VISIBLE,
-        isDraft: false,
-      },
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       include: {
         likes: true,

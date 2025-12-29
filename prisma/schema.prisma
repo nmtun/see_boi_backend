@@ -48,6 +48,7 @@ enum ReportStatus {
 enum NotificationType {
   POST_LIKE
   POST_COMMENT
+  COMMENT_LIKE
   FOLLOW
   NEW_POST
 }
@@ -116,6 +117,7 @@ model User {
   postViews    PostView[]
   faceLandmarks UserFaceLandmarks[]
   images       Image[]
+  tagFollows   TagFollow[]    @relation("TagFollower")
 }
 
 //////////////////////////////////////////////////
@@ -176,7 +178,7 @@ model PostEditHistory {
   oldContent String?
   editedAt   DateTime @default(now())
 
-  post Post @relation(fields: [postId], references: [id])
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
 //////////////////////////////////////////////////
@@ -231,7 +233,7 @@ model PostLike {
   userId    Int
   createdAt DateTime @default(now())
 
-  post Post @relation(fields: [postId], references: [id])
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id])
 
   @@id([postId, userId])
@@ -245,17 +247,35 @@ model Tag {
   id   Int    @id @default(autoincrement())
   name String @unique
 
-  posts PostTag[]
+  posts     PostTag[]
+  followers TagFollow[] @relation("TagFollowers")
 }
 
 model PostTag {
   postId Int
   tagId  Int
 
-  post Post @relation(fields: [postId], references: [id])
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   tag  Tag  @relation(fields: [tagId], references: [id])
 
   @@id([postId, tagId])
+}
+
+//////////////////////////////////////////////////
+// TAG FOLLOW SYSTEM
+//////////////////////////////////////////////////
+
+model TagFollow {
+  userId    Int
+  tagId     Int
+  createdAt DateTime @default(now())
+
+  user User @relation("TagFollower", fields: [userId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation("TagFollowers", fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tagId])
+  @@index([userId])
+  @@index([tagId])
 }
 
 //////////////////////////////////////////////////
@@ -279,7 +299,7 @@ model Bookmark {
   createdAt    DateTime @default(now())
 
   user       User        @relation(fields: [userId], references: [id])
-  post       Post        @relation(fields: [postId], references: [id])
+  post       Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
   collection Collection? @relation(fields: [collectionId], references: [id])
 
   @@id([userId, postId])
@@ -294,7 +314,7 @@ model Poll {
   postId    Int       @unique
   expiresAt DateTime?
 
-  post    Post         @relation(fields: [postId], references: [id])
+  post    Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
   options PollOption[]
 }
 
@@ -303,7 +323,7 @@ model PollOption {
   pollId Int
   text   String
 
-  poll  Poll       @relation(fields: [pollId], references: [id])
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
   votes PollVote[]
 }
 
@@ -312,7 +332,7 @@ model PollVote {
   userId       Int
   createdAt    DateTime @default(now())
 
-  option PollOption @relation(fields: [pollOptionId], references: [id])
+  option PollOption @relation(fields: [pollOptionId], references: [id], onDelete: Cascade)
   user   User       @relation(fields: [userId], references: [id])
 
   @@id([pollOptionId, userId])
@@ -394,7 +414,7 @@ model PostView {
   userId   Int?
   viewedAt DateTime @default(now())
 
-  post Post  @relation(fields: [postId], references: [id])
+  post Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
   user User? @relation(fields: [userId], references: [id])
 
   @@id([postId, viewedAt])

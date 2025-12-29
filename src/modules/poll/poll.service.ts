@@ -79,4 +79,28 @@ export class PollService {
       })),
     };
   }
+
+  /**
+   * Lấy thông tin vote của user trong poll
+   * @param pollId - ID của poll
+   * @param userId - ID của user (optional)
+   * @returns ID của option mà user đã vote, hoặc null nếu chưa vote
+   */
+  async getUserVote(pollId: number, userId?: number): Promise<number | null> {
+    if (!userId) return null;
+
+    const vote = await this.prisma.pollVote.findFirst({
+      where: {
+        userId,
+        option: {
+          pollId,
+        },
+      },
+      select: {
+        pollOptionId: true,
+      },
+    });
+
+    return vote?.pollOptionId ?? null;
+  }
 }

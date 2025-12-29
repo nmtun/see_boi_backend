@@ -79,6 +79,14 @@ export class PostController {
         isDraft: { type: 'boolean', example: false },
         type: { type: 'string', enum: ['NORMAL', 'POLL'], example: 'NORMAL' },
         tagIds: { type: 'array', items: { type: 'number' }, example: [1, 2, 3] },
+        poll: {
+          type: 'object',
+          properties: {
+            options: { type: 'array', items: { type: 'string' }, example: ['Lựa chọn 1', 'Lựa chọn 2'] },
+            expiresAt: { type: 'string', format: 'date-time', example: '2025-12-31T23:59:59Z' },
+          },
+          description: 'Thông tin poll (chỉ dùng khi type=POLL)',
+        },
         thumbnail: {
           type: 'string',
           format: 'binary',
@@ -143,6 +151,11 @@ export class PostController {
           : body.contentJson
         : undefined,
       contentText: body.contentText,
+      poll: body.poll
+        ? typeof body.poll === 'string'
+          ? JSON.parse(body.poll)
+          : body.poll
+        : undefined,
     };
     const post = await this.postService.create(req.user.id, dto, files);
     return new Posts(post);
@@ -150,10 +163,20 @@ export class PostController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch(':id')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'thumbnail', maxCount: 1 },
+        { name: 'images', maxCount: 10 },
+      ],
+      { storage: postStorage },
+    ),
+  )
+  @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({
     summary: 'Cập nhật bài viết',
     description:
-      'Cập nhật thông tin bài viết. Chỉ tác giả mới có thể cập nhật.',
+      'Cập nhật thông tin bài viết. Chỉ tác giả mới có thể cập nhật. Hỗ trợ cả JSON và multipart/form-data.',
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiBody({ type: UpdatePostDto })
@@ -161,30 +184,204 @@ export class PostController {
   @ApiResponse({ status: 403, description: 'Không có quyền cập nhật' })
   async update(
     @Param('id') id: string,
-    @Body() dto: UpdatePostDto,
-    @Req() req,
+    @Body() body: any,
+    @UploadedFiles()
+    files?: {
+      thumbnail?: Express.Multer.File[];
+      images?: Express.Multer.File[];
+    },
+    @Req() req?,
   ) {
+    // Parse poll data nếu có (giống như trong create endpoint)
+    const dto: UpdatePostDto = {
+      ...body,
+      poll: body.poll
+        ? typeof body.poll === 'string'
+          ? JSON.parse(body.poll)
+          : body.poll
+        : undefined,
+      contentJson: body.contentJson
+        ? typeof body.contentJson === 'string'
+          ? JSON.parse(body.contentJson)
+          : body.contentJson
+        : undefined,
+      tagIds: body.tagIds
+        ? (() => {
+            if (Array.isArray(body.tagIds)) {
+              return body.tagIds.map(Number);
+            }
+            if (typeof body.tagIds === 'string') {
+              try {
+                const parsed = JSON.parse(body.tagIds);
+                if (Array.isArray(parsed)) {
+                  return parsed.map(Number);
+                }
+                return [Number(parsed)];
+              } catch {
+                return [Number(body.tagIds)];
+              }
+            }
+            return [Number(body.tagIds)];
+          })()
+        : undefined,
+      isDraft: body.isDraft === 'true' || body.isDraft === true ? true : body.isDraft === 'false' || body.isDraft === false ? false : undefined,
+    };
+    
+    // Update post (service sẽ xử lý poll update)
     const post = await this.postService.update(+id, req.user.id, dto);
-    return new Posts(post);
+    
+    // Return đầy đủ poll data với options
+    if (!post) {
+      throw new BadRequestException('Post not found or update failed');
+    }
+    
+    return {
+      ...post,
+      poll: post.poll
+        ? {
+            ...post.poll,
+            options: post.poll.options || [],
+          }
+        : null,
+    };
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @Get('following-feed')
+  @ApiOperation({
+    summary: 'Lấy bài viết từ những người mình follow',
+    description:
+      'Lấy danh sách bài viết từ những users mà người dùng hiện tại đang follow. ' +
+      'Chỉ hiển thị bài viết PUBLIC, FOLLOWERS, và ANONYMOUS. ' +
+      'Query params: skip, take',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách bài viết từ following users' })
+  async getFollowingFeed(
+    @Req() req,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    const userId = req.user.id;
+    const skipNum = skip ? parseInt(skip, 10) : 0;
+    const takeNum = take ? parseInt(take, 10) : 20;
+
+    const result = await this.postService.getFollowingFeed(
+      userId,
+      skipNum,
+      takeNum,
+    );
+
+    // Process posts with polls
+    const processedPosts = await Promise.all(
+      result.posts.map(async (post) => {
+        let pollResult: any = null;
+        let userVotedOptionId: number | null = null;
+
+        if (post.type === 'POLL' && post.poll) {
+          pollResult = await this.pollService.getResult(post.poll.id);
+
+          if (userId) {
+            userVotedOptionId = await this.pollService.getUserVote(post.poll.id, userId);
+          }
+        }
+
+        return {
+          ...new Posts(post),
+          poll: post.poll,
+          pollResult,
+          userVotedOptionId,
+        };
+      }),
+    );
+
+    return {
+      posts: processedPosts,
+      total: result.total,
+      skip: result.skip,
+      take: result.take,
+      hasMore: result.hasMore,
+    };
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
   @ApiOperation({
-    summary: 'Lấy danh sách tất cả bài viết',
+    summary: 'Lấy danh sách tất cả bài viết hoặc lọc theo tags',
     description:
-      'Lấy tất cả bài viết công khai trong hệ thống. Nếu bài viết có poll, sẽ trả kèm kết quả poll.',
+      'Lấy tất cả bài viết công khai trong hệ thống. Nếu bài viết có poll, sẽ trả kèm kết quả poll. ' +
+      'Có thể lọc theo tags và sắp xếp theo recent/likes/views. ' +
+      'Query params: tagIds (comma-separated IDs), sortBy (recent|likes|views), skip, take',
   })
   @ApiResponse({ status: 200, description: 'Danh sách bài viết' })
-  async findAll() {
-    const posts = await this.postService.findAll();
+  async findAll(
+    @Req() req?,
+    @Query('tagIds') tagIds?: string,
+    @Query('sortBy') sortBy?: 'recent' | 'likes' | 'views',
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    const viewerId = req?.user?.id;
+
+    // Nếu có filter theo tags
+    if (tagIds) {
+      const tagIdArray = tagIds.split(',').map((id) => parseInt(id.trim(), 10));
+      const skipNum = skip ? parseInt(skip, 10) : 0;
+      const takeNum = take ? parseInt(take, 10) : 20;
+
+      const result = await this.postService.getPostsByTags(
+        tagIdArray,
+        sortBy || 'recent',
+        skipNum,
+        takeNum,
+        viewerId,
+      );
+
+      // Process posts with polls
+      const processedPosts = await Promise.all(
+        result.posts.map(async (post) => {
+          let pollResult: any = null;
+          let userVotedOptionId: number | null = null;
+
+          if (post.type === 'POLL' && post.poll) {
+            pollResult = await this.pollService.getResult(post.poll.id);
+
+            if (viewerId) {
+              userVotedOptionId = await this.pollService.getUserVote(post.poll.id, viewerId);
+            }
+          }
+
+          return {
+            ...new Posts(post),
+            poll: post.poll,
+            pollResult,
+            userVotedOptionId,
+          };
+        }),
+      );
+
+      return {
+        posts: processedPosts,
+        total: result.total,
+        skip: result.skip,
+        take: result.take,
+        hasMore: result.hasMore,
+      };
+    }
+
+    // Default behavior: get all posts
+    const posts = await this.postService.findAll(viewerId);
 
     return Promise.all(
       posts.map(async (post) => {
         // Nếu có poll, trả về luôn kết quả poll
         let pollResult: any = null;
+        let userVotedOptionId: number | null = null;
+        
         if (post.poll) {
           pollResult = await this.pollService.getResult(post.poll.id);
+          userVotedOptionId = await this.pollService.getUserVote(post.poll.id, viewerId);
         }
+        
         return {
           ...new Posts(post),
           poll: post.poll
@@ -192,11 +389,45 @@ export class PostController {
                 ...post.poll,
                 options: post.poll.options,
                 result: pollResult,
+                userVotedOptionId,
               }
             : null,
         };
       }),
     );
+  }
+
+  @Get('trending')
+  @ApiOperation({
+    summary: 'Lấy bài viết trending',
+    description: 'Lấy danh sách bài viết đang hot/trending',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách bài viết trending' })
+  async getTrending() {
+    return this.postService.getTrending();
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get('deleted/me')
+  @ApiOperation({
+    summary: 'Lấy danh sách bài viết đã xóa',
+    description:
+      'Lấy danh sách bài viết đã xóa tạm thời của người dùng hiện tại',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách bài viết đã xóa' })
+  async getDeletedPosts(@Req() req) {
+    return this.postService.getDeletedPosts(req.user.id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get('drafts/me')
+  @ApiOperation({
+    summary: 'Lấy danh sách bản nháp',
+    description: 'Lấy tất cả bài viết bản nháp của người dùng hiện tại',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách bản nháp' })
+  async getDrafts(@Req() req) {
+    return this.postService.getDrafts(req.user.id);
   }
 
   @UseGuards(OptionalJwtAuthGuard)
@@ -219,10 +450,13 @@ export class PostController {
 
     const post = await this.postService.findById(+id, viewerId);
 
-    // Nếu có poll, trả về luôn kết quả poll
+    // Nếu có poll, trả về luôn kết quả poll và thông tin vote của user
     let pollResult: any = null;
+    let userVotedOptionId: number | null = null;
+    
     if (post.poll) {
       pollResult = await this.pollService.getResult(post.poll.id);
+      userVotedOptionId = await this.pollService.getUserVote(post.poll.id, viewerId);
     }
 
     return {
@@ -232,6 +466,7 @@ export class PostController {
             ...post.poll,
             options: post.poll.options,
             result: pollResult,
+            userVotedOptionId,
           }
         : null,
     };
@@ -280,18 +515,6 @@ export class PostController {
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Get('deleted/me')
-  @ApiOperation({
-    summary: 'Lấy danh sách bài viết đã xóa',
-    description:
-      'Lấy danh sách bài viết đã xóa tạm thời của người dùng hiện tại',
-  })
-  @ApiResponse({ status: 200, description: 'Danh sách bài viết đã xóa' })
-  async getDeletedPosts(@Req() req) {
-    return this.postService.getDeletedPosts(req.user.id);
-  }
-
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':id/like')
   @ApiOperation({
     summary: 'Thích bài viết',
@@ -313,27 +536,6 @@ export class PostController {
   @ApiResponse({ status: 200, description: 'Bỏ thích thành công' })
   async unlike(@Param('id') id: string, @Req() req) {
     return this.postService.unlike(+id, req.user.id);
-  }
-
-  @Get('trending')
-  @ApiOperation({
-    summary: 'Lấy bài viết trending',
-    description: 'Lấy danh sách bài viết đang hot/trending',
-  })
-  @ApiResponse({ status: 200, description: 'Danh sách bài viết trending' })
-  async getTrending() {
-    return this.postService.getTrending();
-  }
-
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Get('drafts/me')
-  @ApiOperation({
-    summary: 'Lấy danh sách bản nháp',
-    description: 'Lấy tất cả bài viết bản nháp của người dùng hiện tại',
-  })
-  @ApiResponse({ status: 200, description: 'Danh sách bản nháp' })
-  async getDrafts(@Req() req) {
-    return this.postService.getDrafts(req.user.id);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -605,6 +807,7 @@ export class PostController {
     return new Posts(post);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id/posts')
   @ApiOperation({
     summary: 'Lấy danh sách bài viết liên quan',
@@ -612,8 +815,9 @@ export class PostController {
   })
   @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
   @ApiResponse({ status: 200, description: 'Danh sách bài viết liên quan' })
-  async getPostsByUser(@Param('id') id: string) {
-    const posts = await this.postService.getPostsByUser(+id);
+  async getPostsByUser(@Param('id') id: string, @Req() req?) {
+    const viewerId = req?.user?.id;
+    const posts = await this.postService.getPostsByUser(+id, viewerId);
     return posts;
   }
 
