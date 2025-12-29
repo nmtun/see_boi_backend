@@ -36,13 +36,14 @@ export class SearchService {
     }
 
     async searchPosts(query: string, limit: number = 50) {
-        // Tìm kiếm trong title, content, và contentText
+        // Tìm kiếm trong title, content, contentText, và contentJson
         // Sử dụng PostgreSQL full-text search với ranking
         const posts = await this.prisma.$queryRaw<any[]>`
             SELECT 
                 p.id,
                 p.title,
                 p."contentText",
+                p.content,
                 p."thumbnailUrl",
                 p."createdAt",
                 p."userId",
@@ -53,11 +54,16 @@ export class SearchService {
                 COUNT(DISTINCT c.id) as "commentCount",
                 (
                     ts_rank(
-                        to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p."contentText", '')),
+                        to_tsvector('english', 
+                            COALESCE(p.title, '') || ' ' || 
+                            COALESCE(p."contentText", '') || ' ' || 
+                            COALESCE(p.content, '') || ' ' ||
+                            COALESCE(p."contentJson"::text, '')
+                        ),
                         plainto_tsquery('english', ${query})
                     ) * 2 +
                     similarity(COALESCE(p.title, ''), ${query}) * 3 +
-                    similarity(COALESCE(p."contentText", ''), ${query})
+                    similarity(COALESCE(p."contentText", '') || ' ' || COALESCE(p.content, ''), ${query})
                 ) as relevance
             FROM "Post" p
             LEFT JOIN "User" u ON p."userId" = u.id
@@ -67,10 +73,16 @@ export class SearchService {
                 p.status = 'VISIBLE' 
                 AND p."isDraft" = false
                 AND (
-                    to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p."contentText", ''))
-                    @@ plainto_tsquery('english', ${query})
+                    to_tsvector('english', 
+                        COALESCE(p.title, '') || ' ' || 
+                        COALESCE(p."contentText", '') || ' ' || 
+                        COALESCE(p.content, '') || ' ' ||
+                        COALESCE(p."contentJson"::text, '')
+                    ) @@ plainto_tsquery('english', ${query})
                     OR COALESCE(p.title, '') ILIKE ${'%' + query + '%'}
                     OR COALESCE(p."contentText", '') ILIKE ${'%' + query + '%'}
+                    OR COALESCE(p.content, '') ILIKE ${'%' + query + '%'}
+                    OR COALESCE(p."contentJson"::text, '') ILIKE ${'%' + query + '%'}
                 )
             GROUP BY p.id, u.id
             ORDER BY relevance DESC, p."createdAt" DESC
@@ -80,7 +92,7 @@ export class SearchService {
         return posts.map(post => ({
             id: post.id,
             title: post.title,
-            contentText: post.contentText,
+            contentText: post.contentText || post.content, // Fallback nếu contentText null
             thumbnailUrl: post.thumbnailUrl,
             createdAt: post.createdAt,
             likeCount: parseInt(post.likeCount) || 0,
