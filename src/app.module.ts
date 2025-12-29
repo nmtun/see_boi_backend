@@ -19,13 +19,14 @@ import { PhysiognomyModule } from './modules/nhantuong/physiognomy.module';
 import { TrendingModule } from './modules/trending/trending.module';
 import { TarotModule } from './modules/tarot/tarot.module';
 import { OpenAIModule } from './modules/openai/openai.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
     PrismaModule, 
     AuthModule, UserModule, PostModule, CommentModule, TagModule, CollectionModule, PollModule, BadgeModule, NotificationModule, ReportModule, TuViModule ,
     GoogleGeminiModule, PhysiognomyModule, TarotModule, OpenAIModule,
-    UploadModule, TrendingModule
+    UploadModule, TrendingModule, ModerationModule
   ],
   controllers: [], 
   providers: [], // Đã xóa NotificationGateway khỏi đây, chỉ khai báo trong NotificationModule

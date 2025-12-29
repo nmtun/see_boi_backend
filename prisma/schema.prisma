@@ -151,6 +151,7 @@ model Post {
   type          PostType          @default(NORMAL)
   visibility    PostVisibility    @default(PUBLIC)
   status        PostStatus        @default(VISIBLE)
+  category      CommentCategory?  @default(NEUTRAL)
   isDraft       Boolean           @default(false)
   deletedAt     DateTime?
   createdAt     DateTime          @default(now())
@@ -192,6 +193,7 @@ model Comment {
   content     String
   parentId    Int?
   isAnonymous Boolean          @default(false)
+  isDeleted   Boolean          @default(false)
   category    CommentCategory? @default(NEUTRAL)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @default(now()) @updatedAt

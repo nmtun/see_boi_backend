@@ -22,6 +22,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { AddImagesToPostDto } from './dto/add-images-to-post.dto';
 import { Posts } from './entities/post.entity';
 import { RolesGuard } from '../../auth/guard/roles.guard';
+import { Roles } from '../../auth/decorator/roles.decorator';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { OptionalJwtAuthGuard } from '../../auth/guard/optional-jwt.guard';
 import { PostVisibility } from '@prisma/client';
@@ -961,5 +962,56 @@ export class PostController {
   async getPostImages(@Param('id') id: string) {
     const imageUrls = await this.postService.getPostImages(+id);
     return imageUrls;
+  }
+
+  // ==================== ADMIN ENDPOINTS ====================
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Get('admin/all')
+  @ApiOperation({
+    summary: '[ADMIN] Lấy tất cả bài viết',
+    description: 'Lấy danh sách tất cả bài viết trong hệ thống. Chỉ ADMIN mới truy cập được.',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách bài viết' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+  async getAllPostsAdmin(
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+    @Query('search') search?: string,
+  ) {
+    const skipNum = skip ? parseInt(skip) : 0;
+    const takeNum = take ? parseInt(take) : 50;
+    return this.postService.getAllPostsForAdmin(skipNum, takeNum, search);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Delete('admin/:id')
+  @ApiOperation({
+    summary: '[ADMIN] Xóa bài viết',
+    description: 'Xóa vĩnh viễn bài viết. Chỉ ADMIN mới có quyền.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền' })
+  async deletePostAdmin(@Param('id') id: string) {
+    await this.postService.deletePostAdmin(+id);
+    return { message: 'Post deleted successfully' };
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Patch('admin/:id/toggle-visibility')
+  @ApiOperation({
+    summary: '[ADMIN] Ẩn/Hiện bài viết',
+    description: 'Chuyển đổi trạng thái hiển thị của bài viết. Chỉ ADMIN mới có quyền.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền' })
+  async togglePostVisibility(@Param('id') id: string) {
+    const post = await this.postService.togglePostVisibility(+id);
+    return new Posts(post);
   }
 }

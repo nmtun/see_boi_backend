@@ -10,12 +10,16 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Query,
+  Delete,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { GetUsersQueryDto, UpdateUserRoleDto } from './dto/admin-user.dto';
 import { RolesGuard } from '../../auth/guard/roles.guard';
 import { User } from './entities/user.entity';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
+import { Roles } from '../../auth/decorator/roles.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -24,6 +28,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { avatarStorage } from '../../utils/cloudinary.storage';
@@ -307,6 +312,94 @@ export class UserController {
   getMyXpLogs(@Req() req) {
     return this.userService.getMyXpLogs(req.user.id);
   }
+
+  // ==================== ADMIN ENDPOINTS ====================
+  // Note: Admin routes must come BEFORE :id routes to avoid route conflicts
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Get('admin/dashboard/stats')
+  @ApiOperation({
+    summary: '[ADMIN] Lấy thống kê dashboard',
+    description: 'Lấy các thống kê tổng quan cho admin dashboard',
+  })
+  @ApiResponse({ status: 200, description: 'Thống kê dashboard' })
+  async getDashboardStats() {
+    return this.userService.getDashboardStats();
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Get('admin/all')
+  @ApiOperation({
+    summary: '[ADMIN] Lấy danh sách tất cả người dùng',
+    description: 'Lấy danh sách tất cả users với pagination, search, filter. Chỉ ADMIN mới truy cập được.',
+  })
+  @ApiQuery({ name: 'search', required: false, description: 'Tìm kiếm theo tên, username, email' })
+  @ApiQuery({ name: 'role', required: false, enum: ['USER', 'ADMIN', 'ALL'], description: 'Lọc theo vai trò' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số lượng mỗi trang' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách users',
+    schema: {
+      example: {
+        users: [
+          {
+            id: 1,
+            fullName: 'Nguyễn Văn A',
+            userName: 'nguyenvana',
+            email: 'nguyenvana@example.com',
+            role: 'USER',
+            level: 5,
+            xp: 4500,
+            createdAt: '2024-01-15T00:00:00.000Z',
+            _count: {
+              posts: 10,
+              comments: 25,
+              followsFrom: 15,
+              followsTo: 20
+            }
+          }
+        ],
+        total: 100,
+        page: 1,
+        limit: 10,
+        totalPages: 10
+      }
+    }
+  })
+  async getAllUsers(@Query() query: GetUsersQueryDto) {
+    return this.userService.getAllUsers(query);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Get('admin/:id/stats')
+  @ApiOperation({
+    summary: '[ADMIN] Lấy thống kê chi tiết user',
+    description: 'Lấy thống kê chi tiết về user (posts, comments, followers, etc.). Chỉ ADMIN mới truy cập được.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng', type: Number })
+  @ApiResponse({ status: 200, description: 'Thống kê user' })
+  async getUserStats(@Param('id') id: string) {
+    return this.userService.getUserStats(+id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Delete('admin/:id')
+  @ApiOperation({
+    summary: '[ADMIN] Xóa người dùng',
+    description: 'Xóa người dùng khỏi hệ thống. Chỉ ADMIN mới truy cập được.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của người dùng', type: Number })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  async deleteUser(@Param('id') id: string) {
+    return this.userService.deleteUser(+id);
+  }
+
+  // ==================== USER ENDPOINTS ====================
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get(':id/badges')

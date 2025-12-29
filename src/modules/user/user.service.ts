@@ -3,6 +3,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary} from 'cloudinary';
+import { Role } from '@prisma/client';
 @Injectable()
 export class UserService {
   constructor(private prisma: PrismaService, private notificationGateway: NotificationGateway) { }
@@ -239,5 +240,272 @@ export class UserService {
       console.error('Error extracting publicId from URL:', error);
       return null;
     }
+  }
+
+  // ==================== ADMIN METHODS ====================
+
+  // Lấy thống kê dashboard
+  async getDashboardStats() {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Basic counts
+    const [
+      totalUsers,
+      totalPosts,
+      totalComments,
+      pendingReports,
+      newUsersThisWeek,
+      newUsersThisMonth,
+      postsThisWeek,
+      commentsThisWeek,
+    ] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.post.count({ where: { isDraft: false } }),
+      this.prisma.comment.count(),
+      this.prisma.report.count({ where: { status: 'PENDING' } }),
+      this.prisma.user.count({ where: { createdAt: { gte: oneWeekAgo } } }),
+      this.prisma.user.count({ where: { createdAt: { gte: oneMonthAgo } } }),
+      this.prisma.post.count({ 
+        where: { 
+          createdAt: { gte: oneWeekAgo },
+          isDraft: false 
+        } 
+      }),
+      this.prisma.comment.count({ where: { createdAt: { gte: oneWeekAgo } } }),
+    ]);
+
+    // Post statistics by type
+    const postsByType = await this.prisma.post.groupBy({
+      by: ['type'],
+      where: { isDraft: false },
+      _count: true,
+    });
+
+    // Post statistics by status
+    const postsByStatus = await this.prisma.post.groupBy({
+      by: ['status'],
+      where: { isDraft: false },
+      _count: true,
+    });
+
+    // Comment statistics by category
+    const commentsByCategory = await this.prisma.comment.groupBy({
+      by: ['category'],
+      _count: true,
+    });
+
+    // Top users by XP (exclude ADMIN)
+    const topUsers = await this.prisma.user.findMany({
+      where: {
+        role: 'USER',
+      },
+      take: 10,
+      orderBy: { xp: 'desc' },
+      select: {
+        id: true,
+        fullName: true,
+        userName: true,
+        avatarUrl: true,
+        xp: true,
+        level: true,
+        _count: {
+          select: {
+            posts: true,
+            comments: true,
+          },
+        },
+      },
+    });
+
+    // User growth (last 30 days)
+    const userGrowth = await this.prisma.$queryRaw`
+      SELECT 
+        DATE("createdAt") as date,
+        COUNT(*)::int as count
+      FROM "User"
+      WHERE "createdAt" >= ${oneMonthAgo}
+      GROUP BY DATE("createdAt")
+      ORDER BY date ASC
+    `;
+
+    // Post activity (last 30 days)
+    const postActivity = await this.prisma.$queryRaw`
+      SELECT 
+        DATE("createdAt") as date,
+        COUNT(*)::int as count
+      FROM "Post"
+      WHERE "createdAt" >= ${oneMonthAgo}
+        AND "isDraft" = false
+      GROUP BY DATE("createdAt")
+      ORDER BY date ASC
+    `;
+
+    // Engagement stats
+    const [totalLikes, totalViews, totalBookmarks] = await Promise.all([
+      this.prisma.postLike.count(),
+      this.prisma.postView.count(),
+      this.prisma.bookmark.count(),
+    ]);
+
+    // Report statistics by status
+    const reportsByStatus = await this.prisma.report.groupBy({
+      by: ['status'],
+      _count: true,
+    });
+
+    return {
+      overview: {
+        totalUsers,
+        totalPosts,
+        totalComments,
+        pendingReports,
+        newUsersThisWeek,
+        newUsersThisMonth,
+        postsThisWeek,
+        commentsThisWeek,
+      },
+      posts: {
+        byType: postsByType,
+        byStatus: postsByStatus,
+      },
+      comments: {
+        byCategory: commentsByCategory,
+      },
+      engagement: {
+        totalLikes,
+        totalViews,
+        totalBookmarks,
+      },
+      reports: {
+        byStatus: reportsByStatus,
+      },
+      topUsers,
+      charts: {
+        userGrowth,
+        postActivity,
+      },
+    };
+  }
+
+  // Lấy danh sách tất cả users với pagination, search, filter
+  async getAllUsers(query: {
+    search?: string;
+    role?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { search, role } = query;
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    // Search by name, username, email
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { userName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Filter by role
+    if (role && role !== 'ALL') {
+      where.role = role;
+    } else {
+      // Không hiển thị ADMIN trong danh sách
+      where.role = 'USER';
+    }
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          fullName: true,
+          userName: true,
+          email: true,
+          role: true,
+          avatarUrl: true,
+          level: true,
+          xp: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              posts: true,
+              comments: true,
+              followsFrom: true,
+              followsTo: true,
+            },
+          },
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      users,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // Lấy thống kê chi tiết của user
+  async getUserStats(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        _count: {
+          select: {
+            posts: true,
+            comments: true,
+            likes: true,
+            followsFrom: true,
+            followsTo: true,
+            reports: true,
+          },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      userName: user.userName,
+      email: user.email,
+      role: user.role,
+      avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      level: user.level,
+      xp: user.xp,
+      createdAt: user.createdAt,
+      stats: {
+        totalPosts: user._count.posts,
+        totalComments: user._count.comments,
+        totalLikes: user._count.likes,
+        followers: user._count.followsTo,
+        following: user._count.followsFrom,
+        reports: user._count.reports,
+      },
+    };
+  }
+
+  // Xóa user (soft delete hoặc hard delete)
+  async deleteUser(userId: number) {
+    // Hard delete
+    return this.prisma.user.delete({
+      where: { id: userId },
+    });
   }
 }
