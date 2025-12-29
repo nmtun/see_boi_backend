@@ -10,6 +10,7 @@ import { VoteType } from '@prisma/client';
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
 import { UserService } from '../user/user.service';
+import { LLMModerationService } from '../../utils/llm-moderation.service';
 
 @Injectable()
 export class CommentService {
@@ -17,6 +18,7 @@ export class CommentService {
     private prisma: PrismaService,
     private notificationGateway: NotificationGateway,
     private userService: UserService,
+    private llmModeration: LLMModerationService,
   ) {}
 
   async update(commentId: number, userId: number, dto: UpdateCommentDto) {
@@ -154,6 +156,9 @@ export class CommentService {
       }
     }
 
+    // Moderate comment content với LLM để phát hiện nội dung không phù hợp
+    const moderationResult = await this.llmModeration.moderateContent(dto.content);
+
     const replyComment = await this.prisma.comment.create({
       data: {
         postId: parent.postId,
@@ -161,6 +166,7 @@ export class CommentService {
         parentId: commentId,
         content: dto.content,
         isAnonymous: dto.isAnonymous ?? false,
+        category: moderationResult.category,
       },
       include: {
         user: {
@@ -382,5 +388,154 @@ export class CommentService {
       console.error('Error extracting publicId from URL:', error);
       return null;
     }
+  }
+
+  // ==================== ADMIN METHODS ====================
+
+  async getAllCommentsForAdmin(skip = 0, take = 50, search?: string) {
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { content: { contains: search, mode: 'insensitive' } },
+        { user: { fullName: { contains: search, mode: 'insensitive' } } },
+        { user: { userName: { contains: search, mode: 'insensitive' } } },
+        { post: { title: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [comments, total] = await Promise.all([
+      this.prisma.comment.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              userName: true,
+              avatarUrl: true,
+            },
+          },
+          post: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.comment.count({ where }),
+    ]);
+
+    return {
+      comments: comments.map((comment) => ({
+        id: comment.id,
+        content: comment.content,
+        authorName: comment.isAnonymous
+          ? 'Ẩn danh'
+          : comment.user.fullName || comment.user.userName,
+        postTitle: comment.post.title || 'Untitled',
+        createdAt: comment.createdAt,
+        isVisible: !comment.isDeleted,
+        isAnonymous: comment.isAnonymous,
+        category: comment.category,
+      })),
+      total,
+      skip,
+      take,
+    };
+  }
+
+  async deleteCommentAdmin(commentId: number) {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+      include: { 
+        images: true,
+        post: {
+          select: {
+            title: true,
+          },
+        },
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment không tồn tại');
+    }
+
+    const commentUserId = comment.userId;
+    const postTitle = comment.post.title || 'Untitled';
+
+    // Delete images from Cloudinary
+    for (const image of comment.images) {
+      const publicId = this.extractPublicIdFromUrl(image.url);
+      if (publicId) {
+        try {
+          await cloudinary.uploader.destroy(publicId);
+        } catch (error) {
+          console.error('Error deleting image from Cloudinary:', error);
+        }
+      }
+    }
+
+    // Delete the comment
+    await this.prisma.comment.delete({
+      where: { id: commentId },
+    });
+
+    // Send notification to user
+    this.notificationGateway.emitAdminDeleteComment(commentUserId, postTitle);
+
+    return { message: 'Comment deleted successfully' };
+  }
+
+  async toggleCommentVisibility(commentId: number) {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+      include: {
+        post: {
+          select: {
+            title: true,
+          },
+        },
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment không tồn tại');
+    }
+
+    const commentUserId = comment.userId;
+    const postTitle = comment.post.title || 'Untitled';
+    const isVisible = comment.isDeleted; // Will be shown after toggle
+
+    const updatedComment = await this.prisma.comment.update({
+      where: { id: commentId },
+      data: { isDeleted: !comment.isDeleted },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            userName: true,
+            avatarUrl: true,
+          },
+        },
+        post: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+    });
+
+    // Send notification to user
+    this.notificationGateway.emitAdminHideComment(commentUserId, postTitle, isVisible);
+
+    return updatedComment;
   }
 }

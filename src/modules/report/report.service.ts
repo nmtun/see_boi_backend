@@ -3,11 +3,15 @@ import { CreateReportDto } from './dto/create-report.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ReportStatus } from '@prisma/client';
 import { UpdateReportStatusDto } from './dto/update-report-status.dto';
+import { NotificationGateway } from 'src/utils/notification.gateway';
 
 
 @Injectable()
 export class ReportService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private notificationGateway: NotificationGateway,
+  ) { }
 
 
   async create(userId: number, dto: CreateReportDto) {
@@ -50,13 +54,38 @@ export class ReportService {
       orderBy: { createdAt: 'desc' },
       include: {
         reporter: {
-          select: { id: true, fullName: true },
+          select: { 
+            id: true, 
+            fullName: true,
+            email: true,
+            userName: true,
+          },
         },
         post: {
-          select: { id: true, title: true },
+          select: { 
+            id: true, 
+            title: true,
+            content: true,
+            status: true,
+            category: true,
+            user: {
+              select: { id: true, fullName: true, userName: true }
+            }
+          },
         },
         comment: {
-          select: { id: true, content: true },
+          select: { 
+            id: true, 
+            content: true,
+            isDeleted: true,
+            category: true,
+            user: {
+              select: { id: true, fullName: true, userName: true }
+            },
+            post: {
+              select: { id: true, title: true }
+            }
+          },
         },
       },
     });
@@ -67,6 +96,114 @@ export class ReportService {
       where: { id: reportId },
       data: { status },
     });
+  }
+
+  async resolveReport(reportId: number, adminAction: string) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: { 
+        post: { include: { user: true } }, 
+        comment: { include: { user: true, post: true } }
+      }
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    // Determine content type and author
+    const contentType = report.post ? 'post' : 'comment';
+    const author = report.post?.user || report.comment?.user;
+    const contentTitle = report.post?.title || report.comment?.post?.title || 'Nội dung';
+
+    // Send notification to reporter
+    this.notificationGateway.emitReportResolved(report.reporterId, adminAction, contentType);
+
+    // Send warning to content author if action is warning
+    if (author && adminAction.includes('cảnh cáo')) {
+      this.notificationGateway.emitReportWarning(author.id, contentType, contentTitle, report.reason);
+    }
+
+    // Update report status
+    return this.prisma.report.update({
+      where: { id: reportId },
+      data: { 
+        status: ReportStatus.RESOLVED,
+      },
+    });
+  }
+
+  async deleteReportedPost(reportId: number) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: { post: { include: { user: true } } }
+    });
+
+    if (!report || !report.postId || !report.post) {
+      throw new NotFoundException('Report or post not found');
+    }
+
+    const post = report.post;
+    const authorId = post.user?.id;
+    const postTitle = post.title || 'Bài viết của bạn';
+
+    // Send notification to reporter
+    this.notificationGateway.emitReportResolved(report.reporterId, 'Đã xóa nội dung vi phạm', 'post');
+
+    // Send notification to post author
+    if (authorId) {
+      this.notificationGateway.emitReportedContentDeleted(authorId, 'post', postTitle, report.reason);
+    }
+
+    // IMPORTANT: Mark report as resolved BEFORE deleting post (to avoid cascade delete)
+    await this.prisma.report.update({
+      where: { id: reportId },
+      data: { status: ReportStatus.RESOLVED, postId: null } // Clear postId to avoid cascade
+    });
+
+    // Delete the post
+    await this.prisma.post.delete({
+      where: { id: report.postId }
+    });
+
+    return { message: 'Post deleted and report resolved successfully' };
+  }
+
+  async deleteReportedComment(reportId: number) {
+    const report = await this.prisma.report.findUnique({
+      where: { id: reportId },
+      include: { comment: { include: { user: true, post: true } } }
+    });
+
+    if (!report || !report.commentId || !report.comment) {
+      throw new NotFoundException('Report or comment not found');
+    }
+
+    const comment = report.comment;
+    const authorId = comment.user?.id;
+    const postTitle = comment.post?.title || 'bài viết';
+    const commentPreview = comment.content.substring(0, 50) + '...';
+
+    // Send notification to reporter
+    this.notificationGateway.emitReportResolved(report.reporterId, 'Đã xóa nội dung vi phạm', 'comment');
+
+    // Send notification to comment author
+    if (authorId) {
+      this.notificationGateway.emitReportedContentDeleted(authorId, 'comment', `"${commentPreview}" trong ${postTitle}`, report.reason);
+    }
+
+    // IMPORTANT: Mark report as resolved BEFORE deleting comment (to avoid cascade delete)
+    await this.prisma.report.update({
+      where: { id: reportId },
+      data: { status: ReportStatus.RESOLVED, commentId: null } // Clear commentId to avoid cascade
+    });
+
+    // Delete the comment
+    await this.prisma.comment.delete({
+      where: { id: report.commentId }
+    });
+
+    return { message: 'Comment deleted and report resolved successfully' };
   }
 
 

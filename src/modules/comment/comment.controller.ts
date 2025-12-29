@@ -8,12 +8,14 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { RolesGuard } from '../../auth/guard/roles.guard';
+import { Roles } from '../../auth/decorator/roles.decorator';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { VoteType } from '@prisma/client/wasm';
 import {
@@ -168,5 +170,55 @@ export class CommentController {
     @Req() req,
   ) {
     return this.commentService.update(+id, req.user.id, updateDto);
+  }
+
+  // ==================== ADMIN ENDPOINTS ====================
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Get('admin/all')
+  @ApiOperation({
+    summary: '[ADMIN] Lấy tất cả comment',
+    description: 'Lấy danh sách tất cả comment trong hệ thống. Chỉ ADMIN mới truy cập được.',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách comment' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+  async getAllCommentsAdmin(
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+    @Query('search') search?: string,
+  ) {
+    const skipNum = skip ? parseInt(skip) : 0;
+    const takeNum = take ? parseInt(take) : 50;
+    return this.commentService.getAllCommentsForAdmin(skipNum, takeNum, search);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Delete('admin/:id')
+  @ApiOperation({
+    summary: '[ADMIN] Xóa comment',
+    description: 'Xóa vĩnh viễn comment. Chỉ ADMIN mới có quyền.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của comment', type: Number })
+  @ApiResponse({ status: 200, description: 'Xóa thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền' })
+  async deleteCommentAdmin(@Param('id') id: string) {
+    await this.commentService.deleteCommentAdmin(+id);
+    return { message: 'Comment deleted successfully' };
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Patch('admin/:id/toggle-visibility')
+  @ApiOperation({
+    summary: '[ADMIN] Ẩn/Hiện comment',
+    description: 'Chuyển đổi trạng thái hiển thị của comment. Chỉ ADMIN mới có quyền.',
+  })
+  @ApiParam({ name: 'id', description: 'ID của comment', type: Number })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền' })
+  async toggleCommentVisibility(@Param('id') id: string) {
+    return this.commentService.toggleCommentVisibility(+id);
   }
 }

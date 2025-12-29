@@ -43,6 +43,46 @@ export class ReportController {
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/resolve')
+  @ApiOperation({ 
+    summary: 'Xử lý và đánh dấu báo cáo đã giải quyết (ADMIN)',
+    description: 'Đánh dấu báo cáo đã được xử lý với hành động cụ thể' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của báo cáo', type: Number })
+  @ApiBody({ schema: { properties: { action: { type: 'string' } } } })
+  @ApiResponse({ status: 200, description: 'Xử lý thành công' })
+  async resolveReport(@Param('id') id: string, @Body() body: { action: string }) {
+    return this.reportService.resolveReport(+id, body.action);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Delete(':id/delete-post')
+  @ApiOperation({ 
+    summary: 'Xóa bài viết bị báo cáo (ADMIN)',
+    description: 'Xóa bài viết vi phạm và đánh dấu báo cáo đã xử lý' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của báo cáo', type: Number })
+  @ApiResponse({ status: 200, description: 'Đã xóa bài viết' })
+  async deleteReportedPost(@Param('id') id: string) {
+    return this.reportService.deleteReportedPost(+id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @Delete(':id/delete-comment')
+  @ApiOperation({ 
+    summary: 'Xóa comment bị báo cáo (ADMIN)',
+    description: 'Xóa comment vi phạm và đánh dấu báo cáo đã xử lý' 
+  })
+  @ApiParam({ name: 'id', description: 'ID của báo cáo', type: Number })
+  @ApiResponse({ status: 200, description: 'Đã xóa comment' })
+  async deleteReportedComment(@Param('id') id: string) {
+    return this.reportService.deleteReportedComment(+id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post()
   @ApiOperation({ 
     summary: 'Tạo báo cáo mới',

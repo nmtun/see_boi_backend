@@ -18,6 +18,7 @@ import {
 import { NotificationGateway } from 'src/utils/notification.gateway';
 import { v2 as cloudinary } from 'cloudinary';
 import { UserService } from '../user/user.service';
+import { LLMModerationService } from '../../utils/llm-moderation.service';
 import { getDefaultPollThumbnail } from 'src/utils/poll-thumbnails';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class PostService {
     private readonly prisma: PrismaService,
     private notificationGateway: NotificationGateway,
     private userService: UserService,
+    private llmModeration: LLMModerationService,
   ) {}
 
   private validateContentJsonSize(
@@ -156,6 +158,16 @@ export class PostService {
       }
     }
 
+    // Moderate content với LLM để phát hiện nội dung không phù hợp
+    const textToModerate = [
+      dto.title,
+      dto.content,
+      dto.contentText,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const moderationResult = await this.llmModeration.moderateContent(textToModerate);
+
     const post = await this.prisma.post.create({
       data: {
         userId,
@@ -171,6 +183,7 @@ export class PostService {
         visibility: dto.visibility ?? PostVisibility.PUBLIC,
         isDraft: dto.isDraft ?? false,
         status: PostStatus.VISIBLE,
+        category: moderationResult.category,
         tags: tagIds
           ? {
               create: tagIds.map((tagId) => ({
@@ -847,6 +860,10 @@ export class PostService {
         }
       }
     }
+
+    // Moderate comment content với LLM để phát hiện nội dung không phù hợp
+    const moderationResult = await this.llmModeration.moderateContent(content);
+
     const comment = await this.prisma.comment.create({
       data: {
         postId,
@@ -854,6 +871,7 @@ export class PostService {
         content,
         parentId,
         isAnonymous: isAnonymous ?? false,
+        category: moderationResult.category,
       },
       include: {
         user: {
@@ -1554,5 +1572,142 @@ export class PostService {
       console.error('Error extracting publicId from URL:', error);
       return null;
     }
+  }
+
+  // ==================== ADMIN METHODS ====================
+
+  async getAllPostsForAdmin(skip = 0, take = 50, search?: string) {
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } },
+        { user: { fullName: { contains: search, mode: 'insensitive' } } },
+        { user: { userName: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              userName: true,
+              avatarUrl: true,
+            },
+          },
+          _count: {
+            select: {
+              likes: true,
+              comments: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.post.count({ where }),
+    ]);
+
+    return {
+      posts: posts.map((post) => ({
+        id: post.id,
+        title: post.title,
+        content: post.content,
+        authorName: post.user.fullName || post.user.userName,
+        createdAt: post.createdAt,
+        likes: post._count.likes,
+        comments: post._count.comments,
+        isVisible: post.status === PostStatus.VISIBLE,
+        status: post.status,
+        category: post.category,
+      })),
+      total,
+      skip,
+      take,
+    };
+  }
+
+  async deletePostAdmin(postId: number) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post không tồn tại');
+    }
+
+    const postTitle = post.title || 'Untitled';
+    const postUserId = post.userId;
+
+    // Delete associated images from Cloudinary
+    const images = await this.prisma.image.findMany({
+      where: { postId, type: 'POST' },
+    });
+
+    for (const image of images) {
+      const publicId = this.extractPublicIdFromUrl(image.url);
+      if (publicId) {
+        try {
+          await cloudinary.uploader.destroy(publicId);
+        } catch (error) {
+          console.error('Error deleting image from Cloudinary:', error);
+        }
+      }
+    }
+
+    // Delete the post (cascade will delete related records)
+    await this.prisma.post.delete({
+      where: { id: postId },
+    });
+
+    // Send notification to user
+    this.notificationGateway.emitAdminDeletePost(postUserId, postTitle);
+
+    return { message: 'Post deleted successfully' };
+  }
+
+  async togglePostVisibility(postId: number) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post không tồn tại');
+    }
+
+    const newStatus =
+      post.status === PostStatus.VISIBLE
+        ? PostStatus.HIDDEN
+        : PostStatus.VISIBLE;
+
+    const postTitle = post.title || 'Untitled';
+    const postUserId = post.userId;
+    const isVisible = newStatus === PostStatus.VISIBLE;
+
+    const updatedPost = await this.prisma.post.update({
+      where: { id: postId },
+      data: { status: newStatus },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            userName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    // Send notification to user
+    this.notificationGateway.emitAdminHidePost(postUserId, postTitle, isVisible);
+
+    return updatedPost;
   }
 }
