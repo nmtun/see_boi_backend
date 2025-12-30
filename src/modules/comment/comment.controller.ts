@@ -29,6 +29,7 @@ import {
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { commentStorage } from 'src/utils/cloudinary.storage';
+import { ModerateRateLimit, RelaxedRateLimit } from '../../auth/decorator/throttle.decorator';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
@@ -38,6 +39,7 @@ export class CommentController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch(':id')
+  @ModerateRateLimit() // 20 requests per minute
   @ApiOperation({
     summary: 'Cập nhật bình luận',
     description: 'Chỉnh sửa nội dung bình luận',

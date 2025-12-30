@@ -6,6 +6,7 @@ import { GetUser } from './decorator/get-user.decorator';
 import { Roles } from './decorator/roles.decorator';
 import { RolesGuard } from './guard/roles.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { StrictRateLimit } from './decorator/throttle.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -13,6 +14,7 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
+  @StrictRateLimit() // 5 requests per minute
   @ApiOperation({ 
     summary: 'Đăng ký tài khoản mới',
     description: 'Tạo tài khoản người dùng mới trong hệ thống. Email và username phải là duy nhất.' 
@@ -43,6 +45,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @StrictRateLimit() // 5 requests per minute
   @ApiOperation({ 
     summary: 'Đăng nhập',
     description: 'Đăng nhập vào hệ thống bằng email và mật khẩu' 

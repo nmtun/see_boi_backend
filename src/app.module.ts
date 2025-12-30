@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -24,12 +26,25 @@ import { SearchModule } from './modules/search/search.module';
 
 @Module({
   imports: [
+    // Rate limiting configuration
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 60 seconds
+        limit: 100, // 100 requests per 60 seconds
+      },
+    ]),
     PrismaModule, 
     AuthModule, UserModule, PostModule, CommentModule, TagModule, CollectionModule, PollModule, BadgeModule, NotificationModule, ReportModule, TuViModule ,
     GoogleGeminiModule, PhysiognomyModule, TarotModule, OpenAIModule,
     UploadModule, TrendingModule, ModerationModule, SearchModule
   ],
   controllers: [], 
-  providers: [], // Đã xóa NotificationGateway khỏi đây, chỉ khai báo trong NotificationModule
+  providers: [
+    // Apply throttler guard globally
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

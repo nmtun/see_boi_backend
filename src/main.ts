@@ -2,10 +2,21 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+
+  // Global validation pipe for security and data integrity
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true, // Remove properties not in DTO
+    forbidNonWhitelisted: true, // Throw error if extra properties
+    transform: true, // Auto transform to DTO types
+    transformOptions: {
+      enableImplicitConversion: true,
+    },
+  }));
 
   // CORS configuration
   app.enableCors({

@@ -6,12 +6,14 @@ import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/auth/guard/roles.guard';
 import { ApiConsumes, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { storage } from 'src/utils/cloudinary.storage';
+import { CustomRateLimit } from 'src/auth/decorator/throttle.decorator';
 
 @Controller('upload')
 export class UploadController {
   constructor(private readonly uploadService: UploadService) { }
 
   @Post('image')
+  @CustomRateLimit(10, 60000) // 10 uploads per minute
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file', { storage }))
   @ApiOperation({

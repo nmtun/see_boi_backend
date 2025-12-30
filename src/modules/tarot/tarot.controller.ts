@@ -19,6 +19,7 @@ import { YesNoTarotDto } from './dto/yes-no-tarot.dto';
 import { OneCardTarotDto } from './dto/one-card-tarot.dto';
 import { LoveSimpleTarotDto } from './dto/love-simple-tarot.dto';
 import { LoveDeepTarotDto } from './dto/love-deep-tarot.dto';
+import { CustomRateLimit } from '../../auth/decorator/throttle.decorator';
 
 @ApiTags('Tarot')
 @ApiBearerAuth()
@@ -28,6 +29,7 @@ export class TarotController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('daily')
+  @CustomRateLimit(5, 300000) // 5 requests per 5 minutes
   @ApiOperation({
     summary: 'Bói tarot hàng ngày',
     description: 'Nhận tên, sinh nhật và 3 lá bài tarot để luận giải về Tình yêu, Tâm trạng và Tiền bạc trong ngày hôm nay. Sử dụng AI Gemini để phân tích và đưa ra luận giải chi tiết.',

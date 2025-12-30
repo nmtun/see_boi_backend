@@ -39,6 +39,7 @@ import {
 import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { postStorage, commentStorage } from '../../utils/cloudinary.storage';
 import { UploadedFile } from '@nestjs/common';
+import { ModerateRateLimit, RelaxedRateLimit } from '../../auth/decorator/throttle.decorator';
 
 @ApiTags('Posts')
 @ApiBearerAuth()
@@ -53,6 +54,7 @@ export class PostController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post()
+  @ModerateRateLimit() // 20 requests per minute
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -164,6 +166,7 @@ export class PostController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch(':id')
+  @ModerateRateLimit() // 20 requests per minute
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -249,6 +252,7 @@ export class PostController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('following-feed')
+  @RelaxedRateLimit() // 200 requests per minute
   @ApiOperation({
     summary: 'Lấy bài viết từ những người mình follow',
     description:
@@ -399,6 +403,7 @@ export class PostController {
   }
 
   @Get('trending')
+  @RelaxedRateLimit() // 200 requests per minute
   @ApiOperation({
     summary: 'Lấy bài viết trending',
     description: 'Lấy danh sách bài viết đang hot/trending',

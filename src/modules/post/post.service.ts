@@ -158,16 +158,7 @@ export class PostService {
       }
     }
 
-    // Moderate content với LLM để phát hiện nội dung không phù hợp
-    const textToModerate = [
-      dto.title,
-      dto.content,
-      dto.contentText,
-    ]
-      .filter(Boolean)
-      .join(' ');
-    const moderationResult = await this.llmModeration.moderateContent(textToModerate);
-
+    // Tạo post trước với category mặc định
     const post = await this.prisma.post.create({
       data: {
         userId,
@@ -183,7 +174,7 @@ export class PostService {
         visibility: dto.visibility ?? PostVisibility.PUBLIC,
         isDraft: dto.isDraft ?? false,
         status: PostStatus.VISIBLE,
-        category: moderationResult.category,
+        category: 'NEUTRAL', // Default category
         tags: tagIds
           ? {
               create: tagIds.map((tagId) => ({
@@ -254,6 +245,24 @@ export class PostService {
     // Cộng 100 điểm cho user khi đăng bài (nếu không phải draft)
     if (!post.isDraft) {
       await this.userService.addXP(userId, 'POST', 100);
+    }
+
+    // Chạy moderation ngầm và cập nhật category sau
+    const textToModerate = [
+      dto.title,
+      dto.content,
+      dto.contentText,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    
+    if (textToModerate) {
+      this.llmModeration.moderateContent(textToModerate).then((moderationResult) => {
+        this.prisma.post.update({
+          where: { id: post.id },
+          data: { category: moderationResult.category },
+        }).catch(err => console.error('Error updating post category:', err));
+      }).catch(err => console.error('Error moderating post:', err));
     }
 
     return {
@@ -894,9 +903,7 @@ export class PostService {
       }
     }
 
-    // Moderate comment content với LLM để phát hiện nội dung không phù hợp
-    const moderationResult = await this.llmModeration.moderateContent(content);
-
+    // Tạo comment trước với category mặc định
     const comment = await this.prisma.comment.create({
       data: {
         postId,
@@ -904,7 +911,7 @@ export class PostService {
         content,
         parentId,
         isAnonymous: isAnonymous ?? false,
-        category: moderationResult.category,
+        category: 'NEUTRAL', // Default category
       },
       include: {
         user: {
@@ -994,6 +1001,14 @@ export class PostService {
       },
     };
     this.notificationGateway.emitNewComment(postId, commentWithMeta);
+
+    // Chạy moderation ngầm và cập nhật category sau
+    this.llmModeration.moderateContent(content).then((moderationResult) => {
+      this.prisma.comment.update({
+        where: { id: comment.id },
+        data: { category: moderationResult.category },
+      }).catch(err => console.error('Error updating comment category:', err));
+    }).catch(err => console.error('Error moderating comment:', err));
 
     return commentWithImages;
   }

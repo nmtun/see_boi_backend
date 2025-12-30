@@ -15,6 +15,7 @@ import { TuViChart, TuViChartResponse } from './tuvi.interface';
 import { AuthGuard } from '@nestjs/passport/dist/auth.guard';
 import { RolesGuard } from '../../auth/guard/roles.guard'; 
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { CustomRateLimit, ModerateRateLimit, RelaxedRateLimit } from '../../auth/decorator/throttle.decorator';
 
 @ApiTags('Tu Vi Charts')
 @Controller('tuvi')
@@ -27,6 +28,7 @@ export class TuViController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @ApiBearerAuth()
   @Post('calculate')
+  @CustomRateLimit(10, 300000) // 10 requests per 5 minutes
   @ApiOperation({
     summary: 'Tính toán lá số Tử Vi (không lưu vào database)',
     description: 'Yêu cầu đăng nhập. Tính toán lá số Tử Vi mà không lưu vào DB. Kết quả chỉ trả về tạm thời.',
