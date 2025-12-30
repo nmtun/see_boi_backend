@@ -156,9 +156,7 @@ export class CommentService {
       }
     }
 
-    // Moderate comment content với LLM để phát hiện nội dung không phù hợp
-    const moderationResult = await this.llmModeration.moderateContent(dto.content);
-
+    // Tạo reply trước với category mặc định
     const replyComment = await this.prisma.comment.create({
       data: {
         postId: parent.postId,
@@ -166,7 +164,7 @@ export class CommentService {
         parentId: commentId,
         content: dto.content,
         isAnonymous: dto.isAnonymous ?? false,
-        category: moderationResult.category,
+        category: 'NEUTRAL', // Default category
       },
       include: {
         user: {
@@ -252,6 +250,14 @@ export class CommentService {
       },
     };
     this.notificationGateway.emitNewComment(parent.postId, replyWithMeta);
+
+    // Chạy moderation ngầm và cập nhật category sau
+    this.llmModeration.moderateContent(dto.content).then((moderationResult) => {
+      this.prisma.comment.update({
+        where: { id: replyComment.id },
+        data: { category: moderationResult.category },
+      }).catch(err => console.error('Error updating reply category:', err));
+    }).catch(err => console.error('Error moderating reply:', err));
 
     return replyWithImages;
   }

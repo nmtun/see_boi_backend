@@ -32,6 +32,7 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { avatarStorage } from '../../utils/cloudinary.storage';
+import { ModerateRateLimit, RelaxedRateLimit } from '../../auth/decorator/throttle.decorator';
 
 @ApiTags('Users')
 @ApiBearerAuth()

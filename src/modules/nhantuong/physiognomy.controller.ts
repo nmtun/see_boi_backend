@@ -25,6 +25,7 @@ import { PhysiognomyService } from './physiognomy.service';
 import { AnalyzeFaceDto } from './dto/analyze-face.dto';
 import { SaveAnalysisDto } from './dto/save-analysis.dto';
 import { PhysiognomyResponse } from './physiognomy.interface';
+import { CustomRateLimit, RelaxedRateLimit } from '../../auth/decorator/throttle.decorator';
 
 @ApiTags('Physiognomy')
 @ApiBearerAuth()
@@ -34,6 +35,7 @@ export class PhysiognomyController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('preview')
+  @CustomRateLimit(10, 300000) // 10 requests per 5 minutes
   @ApiOperation({ 
     summary: 'Phân tích khuôn mặt (xem trước, không lưu)',
     description: 'Upload ảnh khuôn mặt để phân tích các đặc điểm nhân tướng học. Kết quả chỉ được trả về, không lưu vào database. Hỗ trợ định dạng: JPG, JPEG, PNG, WEBP. Kích thước tối đa: 5MB.'

@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { SearchService } from './search.service';
+import { RelaxedRateLimit } from '../../auth/decorator/throttle.decorator';
 
 @ApiTags('Search')
 @Controller('search')
@@ -8,6 +9,7 @@ export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
   @Get('users')
+  @RelaxedRateLimit() // 200 requests per minute
   @ApiOperation({ 
     summary: 'Tìm kiếm người dùng',
     description: 'Tìm kiếm người dùng theo tên, username hoặc email' 
