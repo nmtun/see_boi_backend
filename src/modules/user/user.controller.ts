@@ -414,4 +414,53 @@ export class UserController {
     const badges = await this.userService.getUserBadges(+id);
     return badges;
   }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get('me/suggested-friends')
+  @ApiOperation({
+    summary: 'Lấy danh sách những người bạn có thể biết',
+    description: 'Lấy danh sách gợi ý những người bạn có thể biết dựa trên bạn chung, tags chung và tương tác trên posts',
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số lượng gợi ý (mặc định: 20, tối đa: 100)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách những người bạn có thể biết',
+    schema: {
+      example: [
+        {
+          id: 2,
+          fullName: 'Nguyễn Văn B',
+          userName: 'nguyenvanb',
+          email: 'nguyenvanb@example.com',
+          avatarUrl: 'https://example.com/avatar.jpg',
+          bio: 'Developer',
+          level: 5,
+          xp: 4500,
+          suggestionScore: {
+            mutualFriends: 3,
+            commonTags: 2,
+            interactions: 5,
+            totalScore: 50,
+          },
+          _count: {
+            posts: 10,
+            followsFrom: 15,
+            followsTo: 20,
+          },
+        },
+      ],
+    },
+  })
+  async getSuggestedFriends(@Req() req, @Query('limit') limit?: string) {
+    let limitNum = limit ? parseInt(limit, 10) : 20;
+    // Giới hạn tối đa 100 để tránh query quá nặng
+    if (isNaN(limitNum) || limitNum < 1) {
+      limitNum = 20;
+    }
+    if (limitNum > 100) {
+      limitNum = 100;
+    }
+    const suggestedFriends = await this.userService.getSuggestedFriends(req.user.id, limitNum);
+    return suggestedFriends;
+  }
 }

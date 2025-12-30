@@ -520,4 +520,271 @@ export class UserService {
       where: { id: userId },
     });
   }
+
+  // Lấy danh sách "những người bạn có thể biết"
+  async getSuggestedFriends(userId: number, limit: number = 20) {
+    // Lấy danh sách những người user đang follow và đã follow user
+    const [following, followers] = await Promise.all([
+      this.prisma.userFollow.findMany({
+        where: { followerId: userId },
+        select: { followingId: true },
+      }),
+      this.prisma.userFollow.findMany({
+        where: { followingId: userId },
+        select: { followerId: true },
+      }),
+    ]);
+
+    const followingIds = new Set(following.map((f) => f.followingId));
+    const followerIds = new Set(followers.map((f) => f.followerId));
+    const excludedIds = Array.from(new Set([userId, ...followingIds, ...followerIds]));
+
+    // 1. Tìm bạn chung (mutual friends) - những người mà cả user và suggested user đều follow
+    const userFollowing = await this.prisma.userFollow.findMany({
+      where: { followerId: userId },
+      select: { followingId: true },
+    });
+
+    const userFollowingIds = userFollowing.map((f) => f.followingId);
+    let mutualFriends: Array<{ suggested_user_id: number; mutual_friends_count: number }> = [];
+
+    if (userFollowingIds.length > 0) {
+      const mutualFriendsData = await this.prisma.userFollow.findMany({
+        where: {
+          followerId: { in: userFollowingIds },
+          followingId: {
+            notIn: excludedIds,
+          },
+        },
+        select: {
+          followingId: true,
+          followerId: true,
+        },
+      });
+
+      // Đếm số bạn chung cho mỗi suggested user
+      const mutualCountMap = new Map<number, Set<number>>();
+      mutualFriendsData.forEach((mf) => {
+        if (!mutualCountMap.has(mf.followingId)) {
+          mutualCountMap.set(mf.followingId, new Set());
+        }
+        mutualCountMap.get(mf.followingId)!.add(mf.followerId);
+      });
+
+      mutualFriends = Array.from(mutualCountMap.entries()).map(([suggestedUserId, mutualSet]) => ({
+        suggested_user_id: suggestedUserId,
+        mutual_friends_count: mutualSet.size,
+      }));
+    }
+
+    // 2. Tìm những người follow cùng tags
+    const userTags = await this.prisma.tagFollow.findMany({
+      where: { userId },
+      select: { tagId: true },
+    });
+
+    const userTagIds = userTags.map((t) => t.tagId);
+    let commonTagsUsers: Array<{ suggested_user_id: number; common_tags_count: number }> = [];
+
+    if (userTagIds.length > 0) {
+      const commonTagsData = await this.prisma.tagFollow.findMany({
+        where: {
+          tagId: { in: userTagIds },
+          userId: {
+            notIn: excludedIds,
+          },
+        },
+        select: {
+          userId: true,
+          tagId: true,
+        },
+      });
+
+      // Đếm số tags chung cho mỗi user
+      const tagsCountMap = new Map<number, Set<number>>();
+      commonTagsData.forEach((ct) => {
+        if (!tagsCountMap.has(ct.userId)) {
+          tagsCountMap.set(ct.userId, new Set());
+        }
+        tagsCountMap.get(ct.userId)!.add(ct.tagId);
+      });
+
+      commonTagsUsers = Array.from(tagsCountMap.entries()).map(([suggestedUserId, tagsSet]) => ({
+        suggested_user_id: suggestedUserId,
+        common_tags_count: tagsSet.size,
+      }));
+    }
+
+    // 3. Tìm những người tương tác trên cùng posts (like hoặc comment)
+    const userPosts = await this.prisma.post.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+
+    const userPostIds = userPosts.map((p) => p.id);
+    let commonInteractionsUsers: Array<{ suggested_user_id: number; interaction_score: number }> = [];
+
+    if (userPostIds.length > 0) {
+      const [postLikes, postComments] = await Promise.all([
+        this.prisma.postLike.findMany({
+          where: {
+            postId: { in: userPostIds },
+            userId: { notIn: excludedIds },
+          },
+          select: {
+            userId: true,
+            postId: true,
+          },
+        }),
+        this.prisma.comment.findMany({
+          where: {
+            postId: { in: userPostIds },
+            userId: { notIn: excludedIds },
+          },
+          select: {
+            userId: true,
+            postId: true,
+          },
+        }),
+      ]);
+
+      // Đếm số posts tương tác cho mỗi user
+      const interactionsMap = new Map<number, Set<number>>();
+      [...postLikes, ...postComments].forEach((interaction) => {
+        if (!interactionsMap.has(interaction.userId)) {
+          interactionsMap.set(interaction.userId, new Set());
+        }
+        interactionsMap.get(interaction.userId)!.add(interaction.postId);
+      });
+
+      commonInteractionsUsers = Array.from(interactionsMap.entries()).map(([suggestedUserId, postsSet]) => ({
+        suggested_user_id: suggestedUserId,
+        interaction_score: postsSet.size,
+      }));
+    }
+
+    // 4. Tính điểm và gộp kết quả
+    const scoreMap = new Map<number, {
+      mutualFriends: number;
+      commonTags: number;
+      interactions: number;
+      totalScore: number;
+    }>();
+
+    // Điểm cho mutual friends (trọng số cao nhất: 10 điểm mỗi bạn chung)
+    mutualFriends.forEach((mf) => {
+      const suggestedUserId = mf.suggested_user_id;
+      const count = mf.mutual_friends_count;
+      if (!scoreMap.has(suggestedUserId)) {
+        scoreMap.set(suggestedUserId, { mutualFriends: 0, commonTags: 0, interactions: 0, totalScore: 0 });
+      }
+      const score = scoreMap.get(suggestedUserId)!;
+      score.mutualFriends = count;
+      score.totalScore += count * 10;
+    });
+
+    // Điểm cho common tags (trọng số: 5 điểm mỗi tag chung)
+    commonTagsUsers.forEach((ct) => {
+      const suggestedUserId = ct.suggested_user_id;
+      const count = ct.common_tags_count;
+      if (!scoreMap.has(suggestedUserId)) {
+        scoreMap.set(suggestedUserId, { mutualFriends: 0, commonTags: 0, interactions: 0, totalScore: 0 });
+      }
+      const score = scoreMap.get(suggestedUserId)!;
+      score.commonTags = count;
+      score.totalScore += count * 5;
+    });
+
+    // Điểm cho interactions (trọng số: 2 điểm mỗi tương tác)
+    commonInteractionsUsers.forEach((ci) => {
+      const suggestedUserId = ci.suggested_user_id;
+      const count = ci.interaction_score;
+      if (!scoreMap.has(suggestedUserId)) {
+        scoreMap.set(suggestedUserId, { mutualFriends: 0, commonTags: 0, interactions: 0, totalScore: 0 });
+      }
+      const score = scoreMap.get(suggestedUserId)!;
+      score.interactions = count;
+      score.totalScore += count * 2;
+    });
+
+    // 5. Sắp xếp theo điểm và lấy top users
+    const suggestedUserIds = Array.from(scoreMap.entries())
+      .sort((a, b) => b[1].totalScore - a[1].totalScore)
+      .slice(0, limit)
+      .map(([suggestedUserId]) => suggestedUserId);
+
+    // 6. Nếu không đủ, thêm những user ngẫu nhiên mà user chưa follow
+    if (suggestedUserIds.length < limit) {
+      const neededCount = limit - suggestedUserIds.length;
+      
+      // Tạo danh sách excluded IDs bao gồm cả những user đã được suggest
+      const allExcludedIds = [...excludedIds, ...suggestedUserIds];
+      
+      // Lấy tất cả user IDs phù hợp
+      const allAvailableUsers = await this.prisma.user.findMany({
+        where: {
+          id: { notIn: allExcludedIds },
+          role: 'USER',
+        },
+        select: { id: true },
+      });
+
+      // Shuffle ngẫu nhiên và lấy số lượng cần thiết
+      const availableIds = allAvailableUsers.map((u) => u.id);
+      // Fisher-Yates shuffle algorithm
+      for (let i = availableIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availableIds[i], availableIds[j]] = [availableIds[j], availableIds[i]];
+      }
+
+      const randomUsers = availableIds.slice(0, neededCount);
+      suggestedUserIds.push(...randomUsers);
+    }
+
+    // 7. Lấy thông tin chi tiết của suggested users
+    const suggestedUsers = await this.prisma.user.findMany({
+      where: {
+        id: { in: suggestedUserIds },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        userName: true,
+        email: true,
+        avatarUrl: true,
+        bio: true,
+        level: true,
+        xp: true,
+        _count: {
+          select: {
+            posts: true,
+            followsFrom: true,
+            followsTo: true,
+          },
+        },
+      },
+    });
+
+    // 8. Sắp xếp lại theo thứ tự điểm số và thêm thông tin điểm
+    // Đảm bảo loại bỏ những người đã follow (double check để chắc chắn)
+    const result = suggestedUserIds
+      .filter((id) => !followingIds.has(id)) // Loại bỏ những người đã follow
+      .map((id) => {
+        const user = suggestedUsers.find((u) => u.id === id);
+        if (!user) return null;
+        const score = scoreMap.get(id) || { mutualFriends: 0, commonTags: 0, interactions: 0, totalScore: 0 };
+        return {
+          ...user,
+          suggestionScore: {
+            mutualFriends: score.mutualFriends,
+            commonTags: score.commonTags,
+            interactions: score.interactions,
+            totalScore: score.totalScore,
+          },
+        };
+      })
+      .filter((u) => u !== null);
+
+    return result;
+  }
 }
