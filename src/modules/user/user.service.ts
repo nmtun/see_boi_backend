@@ -171,7 +171,7 @@ export class UserService {
     });
 
     // Cập nhật XP của user
-    const user = await this.prisma.user.update({
+    let user = await this.prisma.user.update({
       where: { id: userId },
       data: {
         xp: {
@@ -184,8 +184,20 @@ export class UserService {
       },
     });
 
+    // Đảm bảo XP không bao giờ nhỏ hơn 0
+    if (user.xp < 0) {
+      user = await this.prisma.user.update({
+        where: { id: userId },
+        data: { xp: 0 },
+        select: {
+          xp: true,
+          level: true,
+        },
+      });
+    }
+
     // Tính toán level (mỗi 1000 XP = 1 level)
-    const newLevel = Math.floor(user.xp / 1000) + 1;
+    const newLevel = Math.floor(Math.max(0, user.xp) / 1000) + 1;
     if (newLevel !== user.level) {
       await this.prisma.user.update({
         where: { id: userId },
