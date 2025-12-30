@@ -229,7 +229,7 @@ export class PostController {
     };
     
     // Update post (service sẽ xử lý poll update)
-    const post = await this.postService.update(+id, req.user.id, dto);
+    const post = await this.postService.update(+id, req.user.id, dto, files);
     
     // Return đầy đủ poll data với options
     if (!post) {

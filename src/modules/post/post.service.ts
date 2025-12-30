@@ -263,7 +263,15 @@ export class PostService {
   }
 
   // cập nhật bài viết
-  async update(postId: number, userId: number, dto: UpdatePostDto) {
+  async update(
+    postId: number,
+    userId: number,
+    dto: UpdatePostDto,
+    files?: {
+      thumbnail?: Express.Multer.File[];
+      images?: Express.Multer.File[];
+    },
+  ) {
     const post = await this.prisma.post.findUnique({ 
       where: { id: postId },
       include: { poll: { include: { options: true } } }
@@ -301,11 +309,35 @@ export class PostService {
 
     const normalizedTagIds = tagIds ? Array.from(new Set(tagIds)) : undefined;
 
+    // Extract new thumbnail from uploaded file (if any)
+    let newThumbnailUrl: string | undefined;
+    if (files?.thumbnail && files.thumbnail.length > 0) {
+      const thumbnailFile = files.thumbnail[0];
+      newThumbnailUrl =
+        (thumbnailFile as any).path ||
+        (thumbnailFile as any).url ||
+        (thumbnailFile as any).secure_url ||
+        undefined;
+    }
+
+    // Auto-assign default thumbnail for POLL type if no thumbnail exists
+    if (
+      newThumbnailUrl === undefined &&
+      dto.type === 'POLL' &&
+      !post.thumbnailUrl
+    ) {
+      newThumbnailUrl = getDefaultPollThumbnail();
+    }
+
     // Update post
     await this.prisma.post.update({
       where: { id: postId },
       data: {
         ...rest,
+        // Only set thumbnailUrl when we have a decision
+        ...(newThumbnailUrl !== undefined && {
+          thumbnailUrl: newThumbnailUrl ?? null,
+        }),
         contentJson:
           dto.contentJson === undefined
             ? undefined
@@ -437,13 +469,14 @@ export class PostService {
     const whereClause: any = {
       status: PostStatus.VISIBLE,
       isDraft: false,
-      tags: {
-        some: {
-          tagId: {
-            in: tagIds,
+      // AND logic: post phải có TẤT CẢ các tags được chọn
+      AND: tagIds.map(tagId => ({
+        tags: {
+          some: {
+            tagId: tagId,
           },
         },
-      },
+      })),
     };
 
     if (!viewerId) {
