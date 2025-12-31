@@ -97,10 +97,17 @@ class AnalysisDataDto {
   @ApiProperty({
     description: 'Dữ liệu landmarks của khuôn mặt (tọa độ các điểm)',
     example: {},
+    required: false,
   })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === 'object' && !Array.isArray(value)) return value;
+    return {};
+  })
+  
   @IsObject()
-  landmarks: any;
-
+  landmarks?: any;
   @ApiProperty({
     description: 'URL ảnh đã upload lên Cloudinary hoặc storage (tùy chọn)',
     example: 'https://res.cloudinary.com/example/image/upload/v1234567890/face_analysis.jpg',
