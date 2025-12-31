@@ -35,6 +35,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { postStorage, commentStorage } from '../../utils/cloudinary.storage';
@@ -967,6 +968,69 @@ export class PostController {
   async getPostImages(@Param('id') id: string) {
     const imageUrls = await this.postService.getPostImages(+id);
     return imageUrls;
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get(':id/related')
+  @ApiOperation({
+    summary: 'Lấy danh sách bài viết liên quan',
+    description: 'Lấy danh sách bài viết liên quan đến bài viết hiện tại dựa trên tags chung, category, cùng user và tương tác tương tự',
+  })
+  @ApiParam({ name: 'id', description: 'ID của bài viết', type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số lượng bài viết liên quan (mặc định: 10, tối đa: 50)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách bài viết liên quan',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'number', example: 2 },
+          title: { type: 'string', example: 'Bài viết liên quan' },
+          content: { type: 'string', example: 'Nội dung bài viết' },
+          thumbnailUrl: { type: 'string', example: 'https://example.com/thumbnail.jpg' },
+          user: {
+            type: 'object',
+            properties: {
+              id: { type: 'number', example: 1 },
+              fullName: { type: 'string', example: 'Nguyễn Văn A' },
+              userName: { type: 'string', example: 'nguyenvana' },
+              avatarUrl: { type: 'string', example: 'https://example.com/avatar.jpg' },
+            },
+          },
+          relatedScore: {
+            type: 'object',
+            properties: {
+              commonTags: { type: 'number', example: 3 },
+              sameCategory: { type: 'number', example: 1 },
+              sameUser: { type: 'number', example: 0 },
+              similarInteractions: { type: 'number', example: 5 },
+              totalScore: { type: 'number', example: 45 },
+            },
+          },
+          _count: {
+            type: 'object',
+            properties: {
+              likes: { type: 'number', example: 10 },
+              comments: { type: 'number', example: 5 },
+              views: { type: 'number', example: 100 },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Bài viết không tồn tại' })
+  async getRelatedPosts(@Param('id') id: string, @Query('limit') limit?: string, @Req() req?) {
+    const viewerId = req?.user?.id;
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    // Giới hạn tối đa 50 để tránh query quá nặng
+    const finalLimit = isNaN(limitNum) || limitNum < 1 ? 10 : Math.min(limitNum, 50);
+    
+    const relatedPosts = await this.postService.getRelatedPosts(+id, finalLimit, viewerId);
+    // Trả về trực tiếp vì có thêm field relatedScore
+    return relatedPosts;
   }
 
   // ==================== ADMIN ENDPOINTS ====================

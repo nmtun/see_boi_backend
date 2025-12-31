@@ -1758,4 +1758,341 @@ export class PostService {
 
     return updatedPost;
   }
+
+  // Lấy danh sách bài viết liên quan
+  async getRelatedPosts(postId: number, limit: number = 10, viewerId?: number) {
+    // Lấy thông tin bài viết hiện tại
+    const currentPost = await this.prisma.post.findUnique({
+      where: { id: postId },
+      include: {
+        tags: { include: { tag: true } },
+      },
+    });
+
+    if (!currentPost || currentPost.status !== PostStatus.VISIBLE || currentPost.isDraft) {
+      throw new NotFoundException('Post not found or not visible');
+    }
+
+    const currentPostTagIds = currentPost.tags.map((pt) => pt.tagId);
+    const currentPostUserId = currentPost.userId;
+    const currentPostCategory = currentPost.category;
+
+    // Điểm số cho các tiêu chí
+    const scoreMap = new Map<number, {
+      commonTags: number;
+      sameCategory: number;
+      sameUser: number;
+      similarInteractions: number;
+      totalScore: number;
+    }>();
+
+    // 1. Tìm bài viết có tags chung (trọng số cao nhất: 10 điểm mỗi tag chung)
+    if (currentPostTagIds.length > 0) {
+      const postsWithCommonTags = await this.prisma.postTag.findMany({
+        where: {
+          tagId: { in: currentPostTagIds },
+          postId: { not: postId },
+          post: {
+            status: PostStatus.VISIBLE,
+            isDraft: false,
+          },
+        },
+        include: {
+          post: true,
+        },
+      });
+
+      // Đếm số tags chung cho mỗi post
+      const tagsCountMap = new Map<number, Set<number>>();
+      postsWithCommonTags.forEach((pt) => {
+        if (pt.post) {
+          if (!tagsCountMap.has(pt.postId)) {
+            tagsCountMap.set(pt.postId, new Set());
+          }
+          tagsCountMap.get(pt.postId)!.add(pt.tagId);
+        }
+      });
+
+      tagsCountMap.forEach((tagsSet, postId) => {
+        if (!scoreMap.has(postId)) {
+          scoreMap.set(postId, { commonTags: 0, sameCategory: 0, sameUser: 0, similarInteractions: 0, totalScore: 0 });
+        }
+        const score = scoreMap.get(postId)!;
+        score.commonTags = tagsSet.size;
+        score.totalScore += tagsSet.size * 10;
+      });
+    }
+
+    // 2. Tìm bài viết cùng category (trọng số: 5 điểm)
+    if (currentPostCategory) {
+      const postsWithSameCategory = await this.prisma.post.findMany({
+        where: {
+          category: currentPostCategory,
+          id: { not: postId },
+          status: PostStatus.VISIBLE,
+          isDraft: false,
+        },
+        select: { id: true },
+      });
+
+      postsWithSameCategory.forEach((post) => {
+        if (!scoreMap.has(post.id)) {
+          scoreMap.set(post.id, { commonTags: 0, sameCategory: 0, sameUser: 0, similarInteractions: 0, totalScore: 0 });
+        }
+        const score = scoreMap.get(post.id)!;
+        score.sameCategory = 1;
+        score.totalScore += 5;
+      });
+    }
+
+    // 3. Tìm bài viết cùng user (trọng số: 3 điểm)
+    const postsFromSameUser = await this.prisma.post.findMany({
+      where: {
+        userId: currentPostUserId,
+        id: { not: postId },
+        status: PostStatus.VISIBLE,
+        isDraft: false,
+      },
+      select: { id: true },
+      take: 5, // Giới hạn số lượng để tránh quá nhiều
+    });
+
+    postsFromSameUser.forEach((post) => {
+      if (!scoreMap.has(post.id)) {
+        scoreMap.set(post.id, { commonTags: 0, sameCategory: 0, sameUser: 0, similarInteractions: 0, totalScore: 0 });
+      }
+      const score = scoreMap.get(post.id)!;
+      score.sameUser = 1;
+      score.totalScore += 3;
+    });
+
+    // 4. Tìm bài viết có tương tác tương tự (cùng người like hoặc comment) - trọng số: 2 điểm mỗi tương tác
+    const [postLikers, postCommenters] = await Promise.all([
+      this.prisma.postLike.findMany({
+        where: { postId },
+        select: { userId: true },
+      }),
+      this.prisma.comment.findMany({
+        where: { postId },
+        select: { userId: true },
+      }),
+    ]);
+
+    const interactionUserIds = new Set([
+      ...postLikers.map((l) => l.userId),
+      ...postCommenters.map((c) => c.userId),
+    ]);
+
+    if (interactionUserIds.size > 0) {
+      const [similarLikes, similarComments] = await Promise.all([
+        this.prisma.postLike.findMany({
+          where: {
+            userId: { in: Array.from(interactionUserIds) },
+            postId: { not: postId },
+            post: {
+              status: PostStatus.VISIBLE,
+              isDraft: false,
+            },
+          },
+          include: {
+            post: true,
+          },
+        }),
+        this.prisma.comment.findMany({
+          where: {
+            userId: { in: Array.from(interactionUserIds) },
+            postId: { not: postId },
+            post: {
+              status: PostStatus.VISIBLE,
+              isDraft: false,
+            },
+          },
+          include: {
+            post: true,
+          },
+        }),
+      ]);
+
+      // Đếm số tương tác tương tự cho mỗi post
+      const interactionsMap = new Map<number, Set<number>>();
+      [...similarLikes, ...similarComments].forEach((interaction) => {
+        if (interaction.post) {
+          if (!interactionsMap.has(interaction.postId)) {
+            interactionsMap.set(interaction.postId, new Set());
+          }
+          interactionsMap.get(interaction.postId)!.add(interaction.userId);
+        }
+      });
+
+      interactionsMap.forEach((usersSet, postId) => {
+        if (!scoreMap.has(postId)) {
+          scoreMap.set(postId, { commonTags: 0, sameCategory: 0, sameUser: 0, similarInteractions: 0, totalScore: 0 });
+        }
+        const score = scoreMap.get(postId)!;
+        score.similarInteractions = usersSet.size;
+        score.totalScore += usersSet.size * 2;
+      });
+    }
+
+    // 5. Sắp xếp theo điểm và lấy top posts
+    let relatedPostIds = Array.from(scoreMap.entries())
+      .sort((a, b) => b[1].totalScore - a[1].totalScore)
+      .slice(0, limit)
+      .map(([postId]) => postId);
+
+    // 6. Nếu không đủ, thêm bài viết ngẫu nhiên để đảm bảo có đủ limit
+    if (relatedPostIds.length < limit) {
+      const allScoredPostIds = Array.from(scoreMap.keys());
+      const randomPosts = await this.prisma.post.findMany({
+        where: {
+          id: {
+            notIn: [postId, ...allScoredPostIds],
+          },
+          status: PostStatus.VISIBLE,
+          isDraft: false,
+        },
+        select: { id: true },
+        take: limit - relatedPostIds.length,
+        orderBy: { createdAt: 'desc' },
+      });
+
+      relatedPostIds.push(...randomPosts.map((p) => p.id));
+    }
+
+    // 7. Lấy thông tin chi tiết của related posts
+    let relatedPosts = await this.prisma.post.findMany({
+      where: {
+        id: { in: relatedPostIds },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            userName: true,
+            avatarUrl: true,
+          },
+        },
+        tags: { include: { tag: true } },
+        _count: {
+          select: {
+            likes: true,
+            comments: true,
+            views: true,
+          },
+        },
+      },
+    });
+
+    // 8. Kiểm tra quyền xem và sắp xếp lại theo thứ tự điểm số
+    type RelatedPost = typeof relatedPosts[0] & {
+      relatedScore: {
+        commonTags: number;
+        sameCategory: number;
+        sameUser: number;
+        similarInteractions: number;
+        totalScore: number;
+      };
+    };
+    const result: RelatedPost[] = [];
+    const excludedPostIds = new Set<number>([postId]);
+    const minimumPosts = 5;
+    
+    // Lọc và thêm các bài viết có điểm
+    for (const postId of relatedPostIds) {
+      const post = relatedPosts.find((p) => p.id === postId);
+      if (!post) continue;
+
+      // Kiểm tra quyền xem post
+      const canView = await this.canViewPost(post, viewerId);
+      if (!canView) {
+        excludedPostIds.add(postId);
+        continue;
+      }
+
+      const score = scoreMap.get(postId) || {
+        commonTags: 0,
+        sameCategory: 0,
+        sameUser: 0,
+        similarInteractions: 0,
+        totalScore: 0,
+      };
+
+      result.push({
+        ...post,
+        relatedScore: {
+          commonTags: score.commonTags,
+          sameCategory: score.sameCategory,
+          sameUser: score.sameUser,
+          similarInteractions: score.similarInteractions,
+          totalScore: score.totalScore,
+        },
+      });
+      excludedPostIds.add(postId);
+    }
+
+    // 9. Nếu không đủ tối thiểu 5 bài viết, truy vấn thêm
+    if (result.length < minimumPosts) {
+      const neededCount = minimumPosts - result.length;
+      let attempts = 0;
+      const maxAttempts = 3; // Giới hạn số lần thử để tránh vòng lặp vô hạn
+
+      while (result.length < minimumPosts && attempts < maxAttempts) {
+        const additionalPosts = await this.prisma.post.findMany({
+          where: {
+            id: { notIn: Array.from(excludedPostIds) },
+            status: PostStatus.VISIBLE,
+            isDraft: false,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                userName: true,
+                avatarUrl: true,
+              },
+            },
+            tags: { include: { tag: true } },
+            _count: {
+              select: {
+                likes: true,
+                comments: true,
+                views: true,
+              },
+            },
+          },
+          take: neededCount * 2, // Lấy nhiều hơn để có dư sau khi lọc
+          orderBy: { createdAt: 'desc' },
+        });
+
+        for (const post of additionalPosts) {
+          if (result.length >= minimumPosts) break;
+
+          // Kiểm tra quyền xem post
+          const canView = await this.canViewPost(post, viewerId);
+          if (!canView) {
+            excludedPostIds.add(post.id);
+            continue;
+          }
+
+          result.push({
+            ...post,
+            relatedScore: {
+              commonTags: 0,
+              sameCategory: 0,
+              sameUser: 0,
+              similarInteractions: 0,
+              totalScore: 0,
+            },
+          });
+          excludedPostIds.add(post.id);
+        }
+
+        attempts++;
+      }
+    }
+
+    return result;
+  }
 }
