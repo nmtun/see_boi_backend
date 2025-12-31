@@ -248,22 +248,22 @@ export class PostService {
     }
 
     // Chạy moderation ngầm và cập nhật category sau
-    const textToModerate = [
-      dto.title,
-      dto.content,
-      dto.contentText,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    // const textToModerate = [
+    //   dto.title,
+    //   dto.content,
+    //   dto.contentText,
+    // ]
+    //   .filter(Boolean)
+    //   .join(' ');
     
-    if (textToModerate) {
-      this.llmModeration.moderateContent(textToModerate).then((moderationResult) => {
-        this.prisma.post.update({
-          where: { id: post.id },
-          data: { category: moderationResult.category },
-        }).catch(err => console.error('Error updating post category:', err));
-      }).catch(err => console.error('Error moderating post:', err));
-    }
+    // if (textToModerate) {
+    //   this.llmModeration.moderateContent(textToModerate).then((moderationResult) => {
+    //     this.prisma.post.update({
+    //       where: { id: post.id },
+    //       data: { category: moderationResult.category },
+    //     }).catch(err => console.error('Error updating post category:', err));
+    //   }).catch(err => console.error('Error moderating post:', err));
+    // }
 
     return {
       ...postWithImages,
@@ -1003,12 +1003,12 @@ export class PostService {
     this.notificationGateway.emitNewComment(postId, commentWithMeta);
 
     // Chạy moderation ngầm và cập nhật category sau
-    this.llmModeration.moderateContent(content).then((moderationResult) => {
-      this.prisma.comment.update({
-        where: { id: comment.id },
-        data: { category: moderationResult.category },
-      }).catch(err => console.error('Error updating comment category:', err));
-    }).catch(err => console.error('Error moderating comment:', err));
+    // this.llmModeration.moderateContent(content).then((moderationResult) => {
+    //   this.prisma.comment.update({
+    //     where: { id: comment.id },
+    //     data: { category: moderationResult.category },
+    //   }).catch(err => console.error('Error updating comment category:', err));
+    // }).catch(err => console.error('Error moderating comment:', err));
 
     return commentWithImages;
   }
